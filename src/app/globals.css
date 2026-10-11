@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Brand colors extracted from IDEAPAD logo */
+  --brand-primary: #03608C;
+  --brand-primary-light: #E8F4FA;
+  --brand-primary-dark: #024A6C;
+  --brand-accent: #ED1C24;
+  --brand-accent-light: #FEE8E9;
+  --brand-cyan: #0D9488;
+  --brand-dark: #1A1A2E;
+
+  /* Surfaces */
+  --surface: #F8FAFB;
+  --surface-raised: #FFFFFF;
+
+  /* Borders */
+  --border: #E2E8F0;
+
+  /* Status colors */
+  --success: #16A34A;
+  --warning: #EAB308;
+  --danger: #DC2626;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-gray-900 antialiased;
+  }
+
+  /* Focus ring utility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand-primary ring-offset-2;
+  }
+
+  /* Remove default focus ring on buttons that use their own */
+  button:focus:not(:focus-visible) {
+    @apply ring-0;
+  }
+}
+
+@layer components {
+  /* Print styles for PDF export */
+  @media print {
+    header, nav, footer, .no-print {
+      display: none !important;
+    }
+
+    .print-break {
+      page-break-before: always;
+    }
+
+    body {
+      background: white;
+      font-size: 12px;
+    }
+
+    .print-container {
+      max-width: 100%;
+      margin: 0;
+      padding: 20px;
+    }
+
+    table {
+      font-size: 11px;
+    }
+
+    .signature-block {
+      margin-top: 40px;
+      border-top: 1px solid #000;
+      padding-top: 8px;
+      width: 200px;
+    }
+  }
+}
+
+/* Custom scrollbar */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E1 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #CBD5E1;
+    border-radius: 3px;
+  }
+}

@@ -1,0 +1,151 @@
+import { z } from 'zod';
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export const registerSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  enrollmentNo: z.string().min(1, 'Enrollment number is required'),
+  program: z.string().min(1, 'Program is required'),
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+  phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
+  teamName: z.string().min(2, 'Team/startup name must be at least 2 characters'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
+  confirmNewPassword: z.string(),
+}).refine((data) => data.newPassword === data.confirmNewPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmNewPassword'],
+});
+
+export const grantTypeSchema = z.enum(['IDEATION', 'VALIDATION', 'PROOF', 'SCALING', 'EMERGENCY']);
+
+export const applicationFormSection2Schema = z.object({
+  applicantName: z.string().min(1, 'Name is required'),
+  enrollmentNo: z.string().min(1, 'Enrollment number is required'),
+  program: z.string().min(1, 'Program is required'),
+  teamName: z.string().min(1, 'Team/startup name is required'),
+  phone: z.string().min(1, 'Phone is required'),
+  email: z.string().email('Valid email is required'),
+});
+
+export const applicationFormSection3Schema = z.object({
+  problemStatement: z.string().min(10, 'Problem statement must be at least 10 characters'),
+});
+
+export const applicationFormSection4Schema = z.object({
+  proposedSolution: z.string().min(10, 'Proposed solution must be at least 10 characters'),
+});
+
+export const applicationFormSection5Schema = z.object({
+  effortAndTraction: z.string().min(10, 'Please describe your effort and traction so far'),
+});
+
+export const experimentFieldsSchema = z.object({
+  objective: z.string().min(1, 'Objective is required'),
+  problemStatement: z.string().min(1, 'Problem statement is required'),
+  expectedOutcome: z.string().min(1, 'Expected outcome is required'),
+  methodology: z.string().min(1, 'Methodology is required'),
+  experimentalSetup: z.string().min(1, 'Experimental setup is required'),
+  dataToBeCollected: z.string().min(1, 'Data collection plan is required'),
+  validationCriteria: z.string().min(1, 'Validation criteria is required'),
+  risksAndAssumptions: z.string().min(1, 'Risks and assumptions are required'),
+  timeline: z.string().min(1, 'Timeline is required'),
+  deliverables: z.string().min(1, 'Deliverables are required'),
+});
+
+export const budgetItemSchema = z.object({
+  header: z.enum(['EQUIPMENT', 'CONSUMABLES', 'SOFTWARE_CLOUD', 'MANPOWER', 'TRAVEL', 'TESTING', 'PROFESSIONAL_SERVICES', 'OUTREACH', 'CONTINGENCY']),
+  name: z.string().min(1, 'Item name is required'),
+  description: z.string().optional(),
+  vendorSource: z.string().optional(),
+  unitCost: z.number().positive('Unit cost must be positive'),
+  quantity: z.number().int().positive('Quantity must be a positive integer'),
+  total: z.number().nonnegative(),
+  justification: z.string().optional(),
+});
+
+export const readinessLevelSchema = z.object({
+  trl: z.number().int().min(1).max(9),
+  mrl: z.number().int().min(1).max(9),
+  irl: z.number().int().min(1).max(9),
+});
+
+export const milestoneItemSchema = z.object({
+  name: z.string(),
+  status: z.enum(['COMPLETED', 'PENDING']),
+  remarks: z.string().optional(),
+});
+
+export const declarationSchema = z.object({
+  accepted: z.literal(true, { errorMap: () => ({ message: 'You must accept the declaration' }) }),
+  name: z.string().min(1, 'Name is required'),
+  date: z.string().min(1, 'Date is required'),
+});
+
+export const statusAssessmentSchema = z.object({
+  trlLevel: z.number().int().min(1, 'TRL must be 1-9').max(9, 'TRL must be 1-9'),
+  mrlLevel: z.number().int().min(1, 'MRL must be 1-9').max(9, 'MRL must be 1-9'),
+  irlLevel: z.number().int().min(1, 'IRL must be 1-9').max(9, 'IRL must be 1-9'),
+});
+
+export const experimentQuestionAnswerSchema = z.object({
+  questionId: z.string(),
+  answer: z.boolean(),
+  note: z.string().optional(),
+});
+
+export const experimentAssessmentSchema = z.object({
+  questions: z.array(experimentQuestionAnswerSchema).length(12, 'All 12 questions must be answered'),
+  recommendationNote: z.string().optional(),
+  suggestedGrantType: z.enum(['VALIDATION', 'PROOF', 'SCALING', 'REJECTED']).nullable().optional(),
+  suggestedAmounts: z.record(z.number().nonnegative()).optional(),
+  suggestedTotal: z.number().nonnegative().optional(),
+});
+
+export const grantEvaluationSchema = z.object({
+  decision: z.enum(['VALIDATION', 'PROOF', 'SCALING', 'REJECTED', 'RE_PRESENTATION']),
+  approvedAmounts: z.record(z.number().nonnegative()),
+  approvedTotal: z.number().nonnegative(),
+  recommendationNote: z.string().optional(),
+  termsAcknowledged: z.literal(true, { errorMap: () => ({ message: 'You must acknowledge the terms' }) }),
+  timeline: z.object({
+    grantApprovalDate: z.string().min(1),
+    fundReleaseDate: z.string().min(1),
+    experimentDuration: z.string().min(1),
+    midReviewDate: z.string().min(1),
+    grantUtilizationDeadline: z.string().min(1),
+    experimentCompletionDate: z.string().min(1),
+    finalSubmissionDate: z.string().min(1),
+    closureDate: z.string().min(1),
+  }),
+  rePresentationDate: z.string().optional(),
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type BudgetItemInput = z.infer<typeof budgetItemSchema>;
+export type StatusAssessmentInput = z.infer<typeof statusAssessmentSchema>;
+export type ExperimentAssessmentInput = z.infer<typeof experimentAssessmentSchema>;
+export type GrantEvaluationInput = z.infer<typeof grantEvaluationSchema>;

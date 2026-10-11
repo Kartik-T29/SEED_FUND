@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STARTUP
+  SEC_MEMBER
+  ADMIN
+}
+
+// SUPERSEDED = an older version replaced after a re-presentation request
+enum AppStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  REPRESENT
+  SUPERSEDED
+}
+
+enum GrantType {
+  IDEATION
+  VALIDATION
+  PROOF
+  SCALING
+  EMERGENCY
+}
+
+enum FormStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum MilestoneState {
+  COMPLETED
+  PENDING
+  IN_PROGRESS
+}
+
+enum DocType {
+  AGREEMENT
+  PAN
+  AADHAAR
+  PHOTO
+  DECK
+  QUOTATION
+  UTILIZATION_REPORT
+  ANNEXURE
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String
+  passwordHash       String
+  role               Role
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  startup     Startup?
+  assessments Assessment[]
+  milestones  MilestoneAssessment[]
+  remarks     MilestoneRemark[]
+  evaluations GrantEvaluation[]
+}
+
+// OWNERSHIP ROOT: user -> startup -> applications -> everything else
+model Startup {
+  id           String @id @default(cuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id])
+  teamName     String
+  enrollmentNo String
+  program      String
+  phone        String
+  applications Application[]
+  grants       GrantHistory[]
+}
+
+model Application {
+  id             String    @id @default(cuid())
+  startupId      String
+  startup        Startup   @relation(fields: [startupId], references: [id])
+  version        Int       @default(1)
+  supersedesId   String?   @unique
+  status         AppStatus @default(DRAFT)
+  grantType      GrantType?
+  requestedTotal Decimal   @default(0) @db.Decimal(12, 2)
+  formData       Json      @default("{}")
+  submittedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  documents   Document[]
+  budgetItems BudgetItem[]
+  assessments Assessment[]
+  milestone   MilestoneAssessment?
+  evaluation  GrantEvaluation?
+
+  @@index([startupId])
+  @@index([status])
+}
+
+model Document {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type          DocType
+  memberLabel   String?
+  path          String
+  createdAt     DateTime    @default(now())
+  @@index([applicationId])
+}
+
+model BudgetItem {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  header        String
+  name          String
+  vendor        String?
+  unitCost      Decimal     @db.Decimal(12, 2)
+  qty           Int
+  total         Decimal     @db.Decimal(12, 2)
+  justification String?
+  @@index([applicationId])
+}
+
+model Assessment {
+  id             String      @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         User        @relation(fields: [memberId], references: [id])
+  statusForm     Json        @default("{}")
+  experimentForm Json        @default("{}")
+  status         FormStatus  @default(DRAFT)
+  submittedAt    DateTime?
+  @@unique([applicationId, memberId])
+}
+
+model MilestoneAssessment {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  ownerId       String
+  owner         User        @relation(fields: [ownerId], references: [id])
+  track         String
+  status        FormStatus  @default(DRAFT)
+  items         MilestoneItem[]
+  editLog       MilestoneEditLog[]
+}
+
+model MilestoneItem {
+  id          String              @id @default(cuid())
+  milestoneId String
+  milestone   MilestoneAssessment @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  name        String
+  state       MilestoneState      @default(PENDING)
+  ownerRemark String?
+  remarks     MilestoneRemark[]
+}
+
+model MilestoneRemark {
+  id       String        @id @default(cuid())
+  itemId   String
+  item     MilestoneItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  memberId String
+  member   User          @relation(fields: [memberId], references: [id])
+  remark   String
+  @@unique([itemId, memberId])
+}
+
+model MilestoneEditLog {
+  id          String              @id @default(cuid())
+  milestoneId String
+  milestone   MilestoneAssessment @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  memberId    String
+  field       String
+  oldValue    String?
+  newValue    String?
+  at          DateTime            @default(now())
+}
+
+model GrantEvaluation {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id])
+  adminId       String
+  admin         User        @relation(fields: [adminId], references: [id])
+  decision      String
+  approvedTotal Decimal     @db.Decimal(12, 2)
+  amounts       Json
+  timeline      Json
+  note          String?
+  decidedAt     DateTime    @default(now())
+}
+
+model GrantHistory {
+  id        String    @id @default(cuid())
+  startupId String
+  startup   Startup   @relation(fields: [startupId], references: [id])
+  grantType GrantType
+  amount    Decimal   @db.Decimal(12, 2)
+  closedAt  DateTime?
+  waived    Boolean   @default(false)
+  @@index([startupId])
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  actorId  String
+  action   String
+  entity   String
+  entityId String
+  at       DateTime @default(now())
+  @@index([entity, entityId])
+}
