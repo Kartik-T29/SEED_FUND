@@ -2,12 +2,19 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const rawJwtSecret = process.env.JWT_SECRET;
-if (!rawJwtSecret) {
-  throw new Error('FATAL: JWT_SECRET environment variable is required');
+let cachedMiddlewareJwtSecret: Uint8Array | null = null;
+
+function getJwtSecret(): Uint8Array | null {
+  if (cachedMiddlewareJwtSecret) return cachedMiddlewareJwtSecret;
+  const rawJwtSecret = process.env.JWT_SECRET;
+  if (!rawJwtSecret) return null;
+  cachedMiddlewareJwtSecret = new TextEncoder().encode(rawJwtSecret);
+  return cachedMiddlewareJwtSecret;
 }
-const JWT_SECRET = new TextEncoder().encode(rawJwtSecret);
-const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'ideapad_session';
+
+function getCookieName(): string {
+  return process.env.SESSION_COOKIE_NAME || 'ideapad_session';
+}
 
 // Routes that don't require authentication
 const publicRoutes = ['/', '/login', '/register'];
@@ -50,23 +57,26 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check for session token
-  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const token = request.cookies.get(getCookieName())?.value;
 
   // Public routes - redirect to dashboard if already authenticated
   if (publicRoutes.includes(pathname)) {
     if (token) {
-      try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        const role = payload.role as string;
-        if (payload.mustChangePassword) {
-          return NextResponse.redirect(new URL('/change-password', request.url));
+      const secret = getJwtSecret();
+      if (secret) {
+        try {
+          const { payload } = await jwtVerify(token, secret);
+          const role = payload.role as string;
+          if (payload.mustChangePassword) {
+            return NextResponse.redirect(new URL('/change-password', request.url));
+          }
+          // Redirect to appropriate dashboard
+          if (role === 'STARTUP') return NextResponse.redirect(new URL('/dashboard', request.url));
+          if (role === 'SEC_MEMBER') return NextResponse.redirect(new URL('/sec', request.url));
+          if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url));
+        } catch {
+          // Invalid token, continue to public page
         }
-        // Redirect to appropriate dashboard
-        if (role === 'STARTUP') return NextResponse.redirect(new URL('/dashboard', request.url));
-        if (role === 'SEC_MEMBER') return NextResponse.redirect(new URL('/sec', request.url));
-        if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url));
-      } catch {
-        // Invalid token, continue to public page
       }
     }
     return NextResponse.next();
@@ -77,8 +87,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  const secret = getJwtSecret();
+  if (!secret) {
+    console.error('FATAL: JWT_SECRET environment variable is required');
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
     const role = payload.role as string;
     const mustChangePassword = payload.mustChangePassword as boolean;
 
@@ -126,7 +142,7 @@ export async function middleware(request: NextRequest) {
   } catch {
     // Invalid token - clear and redirect to login
     const response = NextResponse.redirect(new URL('/login', request.url));
-    response.cookies.delete(COOKIE_NAME);
+    response.cookies.delete(getCookieName());
     return response;
   }
 }

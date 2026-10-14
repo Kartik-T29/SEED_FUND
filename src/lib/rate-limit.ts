@@ -26,7 +26,7 @@ export function resetRateLimit(key: string): void {
 
 // Cleanup old entries periodically
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
+  const timer = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of attempts.entries()) {
       if (now > entry.resetAt) {
@@ -34,4 +34,7 @@ if (typeof setInterval !== 'undefined') {
       }
     }
   }, 60 * 1000);
+  if (timer && typeof timer.unref === 'function') {
+    timer.unref();
+  }
 }
