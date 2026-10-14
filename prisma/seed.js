@@ -1,97 +1,129 @@
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
 
 const prisma = new PrismaClient();
 
-function generateSecureRandomPassword() {
-  const rand = crypto.randomBytes(12).toString("base64");
-  return `A1!${rand}`;
+function requireEnv(names, label) {
+  for (const name of names) {
+    const val = process.env[name];
+    if (val && val.trim().length > 0) {
+      return val.trim();
+    }
+  }
+  throw new Error(`[Seed Error] Missing required environment variable for ${label}. Please define one of: ${names.join(", ")}`);
 }
 
-const getEnvOrRandom = (key, label) => {
-  const val = process.env[key];
-  if (val && val.trim().length >= 8) {
-    return val.trim();
-  }
-  const generated = generateSecureRandomPassword();
-  console.log(`[Seed Notice] No ${key} provided in environment. Generated random initial password for ${label}.`);
-  return generated;
-};
-
-const adminEmail = (process.env.ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || "admin@ideapad.co.in").toLowerCase().trim();
-const sec1Email = (process.env.SEC_MEMBER_1_EMAIL || process.env.SEED_SEC1_EMAIL || "sec1@ideapad.co.in").toLowerCase().trim();
-const sec2Email = (process.env.SEC_MEMBER_2_EMAIL || process.env.SEED_SEC2_EMAIL || "sec2@ideapad.co.in").toLowerCase().trim();
-const sec3Email = (process.env.SEC_MEMBER_3_EMAIL || process.env.SEED_SEC3_EMAIL || "sec3@ideapad.co.in").toLowerCase().trim();
-
-const users = [
-  {
-    email: adminEmail,
-    name: "IDEAPAD Admin",
-    role: "ADMIN",
-    designation: "Director IDEAPAD",
-    department: "Innovation & Incubation",
-    password: getEnvOrRandom("ADMIN_PASSWORD", "Admin"),
-  },
-  {
-    email: sec1Email,
-    name: "SEC Member 1",
-    role: "SEC_MEMBER",
-    designation: "Senior Professor & HoD",
-    department: "Computer Science & Engineering",
-    password: getEnvOrRandom("SEC_MEMBER_1_PASSWORD", "SEC 1"),
-  },
-  {
-    email: sec2Email,
-    name: "SEC Member 2",
-    role: "SEC_MEMBER",
-    designation: "Associate Professor",
-    department: "Electrical Engineering",
-    password: getEnvOrRandom("SEC_MEMBER_2_PASSWORD", "SEC 2"),
-  },
-  {
-    email: sec3Email,
-    name: "SEC Member 3",
-    role: "SEC_MEMBER",
-    designation: "Dean R&D",
-    department: "School of Management",
-    password: getEnvOrRandom("SEC_MEMBER_3_PASSWORD", "SEC 3"),
-  },
-];
-
 async function main() {
+  console.log("[Seed] Reading seed account configuration from environment variables...");
+
+  const adminEmail = requireEnv(["ADMIN_EMAIL", "SEED_ADMIN_EMAIL"], "Admin Email").toLowerCase().trim();
+  const adminPassword = requireEnv(["ADMIN_PASSWORD", "SEED_ADMIN_PASSWORD"], "Admin Password");
+
+  const sec1Email = requireEnv(["SEC_MEMBER_1_EMAIL", "SEC1_EMAIL", "SEED_SEC1_EMAIL"], "SEC Member 1 Email").toLowerCase().trim();
+  const sec1Password = requireEnv(["SEC_MEMBER_1_PASSWORD", "SEC1_PASSWORD", "SEED_SEC1_PASSWORD"], "SEC Member 1 Password");
+
+  const sec2Email = requireEnv(["SEC_MEMBER_2_EMAIL", "SEC2_EMAIL", "SEED_SEC2_EMAIL"], "SEC Member 2 Email").toLowerCase().trim();
+  const sec2Password = requireEnv(["SEC_MEMBER_2_PASSWORD", "SEC2_PASSWORD", "SEED_SEC2_PASSWORD"], "SEC Member 2 Password");
+
+  const sec3Email = requireEnv(["SEC_MEMBER_3_EMAIL", "SEC3_EMAIL", "SEED_SEC3_EMAIL"], "SEC Member 3 Email").toLowerCase().trim();
+  const sec3Password = requireEnv(["SEC_MEMBER_3_PASSWORD", "SEC3_PASSWORD", "SEED_SEC3_PASSWORD"], "SEC Member 3 Password");
+
+  const users = [
+    {
+      email: adminEmail,
+      name: "IDEAPAD Admin",
+      role: "ADMIN",
+      designation: "Director IDEAPAD",
+      department: "Innovation & Incubation",
+      password: adminPassword,
+    },
+    {
+      email: sec1Email,
+      name: "SEC Member 1",
+      role: "SEC_MEMBER",
+      designation: "Senior Professor & HoD",
+      department: "Computer Science & Engineering",
+      password: sec1Password,
+    },
+    {
+      email: sec2Email,
+      name: "SEC Member 2",
+      role: "SEC_MEMBER",
+      designation: "Associate Professor",
+      department: "Electrical Engineering",
+      password: sec2Password,
+    },
+    {
+      email: sec3Email,
+      name: "SEC Member 3",
+      role: "SEC_MEMBER",
+      designation: "Dean R&D",
+      department: "School of Management",
+      password: sec3Password,
+    },
+  ];
+
   for (const u of users) {
-    const passwordHash = await bcrypt.hash(u.password, 12);
-    await prisma.user.upsert({
+    const existing = await prisma.user.findUnique({
       where: { email: u.email },
-      update: {
-        designation: u.designation,
-        department: u.department,
-        active: true,
-      },
-      create: {
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        designation: u.designation,
-        department: u.department,
-        active: true,
-        passwordHash,
-        mustChangePassword: true,
-      },
     });
+
+    if (!existing) {
+      const passwordHash = await bcrypt.hash(u.password, 12);
+      await prisma.user.create({
+        data: {
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          designation: u.designation,
+          department: u.department,
+          active: true,
+          passwordHash,
+          mustChangePassword: true,
+        },
+      });
+      console.log(`[Seed] Created ${u.role}: ${u.email}`);
+    } else {
+      const passwordMatches = await bcrypt.compare(u.password, existing.passwordHash);
+      if (!passwordMatches) {
+        const passwordHash = await bcrypt.hash(u.password, 12);
+        await prisma.user.update({
+          where: { email: u.email },
+          data: {
+            name: u.name,
+            role: u.role,
+            designation: u.designation,
+            department: u.department,
+            active: true,
+            passwordHash,
+            mustChangePassword: true,
+          },
+        });
+        console.log(`[Seed] Updated ${u.role} (password reset from env): ${u.email}`);
+      } else {
+        await prisma.user.update({
+          where: { email: u.email },
+          data: {
+            name: u.name,
+            role: u.role,
+            designation: u.designation,
+            department: u.department,
+            active: true,
+          },
+        });
+        console.log(`[Seed] Verified ${u.role} (password unchanged): ${u.email}`);
+      }
+    }
   }
 
-  const secCount = await prisma.user.count({ where: { role: "SEC_MEMBER" } });
-  if (secCount !== 3) {
-    console.warn(`[Seed Warning] Expected 3 SEC members, found ${secCount}`);
-  }
-  console.log("[Seed] Completed successfully.");
+  const secCount = await prisma.user.count({ where: { role: "SEC_MEMBER", active: true } });
+  console.log(`[Seed] Active SEC Evaluators count: ${secCount}`);
+  console.log("[Seed] Seeding completed successfully.");
 }
 
 main()
   .catch((e) => {
-    console.error("[Seed Error]", e);
+    console.error("[Seed Error]", e.message || e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
