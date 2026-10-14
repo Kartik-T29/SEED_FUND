@@ -5,6 +5,8 @@ import ConsolidatedReportView from '@/components/consolidated/ConsolidatedReport
 import Link from 'next/link';
 import { ArrowLeft, FileText, Printer } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function SecConsolidatedReportPage({
   params,
 }: {

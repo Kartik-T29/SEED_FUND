@@ -10,6 +10,8 @@ import {
 import { prisma } from '@/lib/prisma';
 import AdminApplicationDetailClient from './AdminApplicationDetailClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminApplicationDetailPage({
   params,
 }: {

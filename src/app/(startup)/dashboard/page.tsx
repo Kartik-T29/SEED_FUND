@@ -8,6 +8,8 @@ import { Lock, FileText, Activity, PlusCircle, ExternalLink, ArrowRight } from '
 import { listApplications, isStatusUnlocked } from '@/lib/access';
 import { formatDate } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export default async function StartupDashboard() {
   const session = await getSession();
   if (!session || session.role !== 'STARTUP') redirect('/login');

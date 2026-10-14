@@ -4,6 +4,8 @@ import { getApplication, getMyAssessment, getMilestoneAssessment } from '@/lib/a
 import SecAssessmentFormClient from './SecAssessmentFormClient';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export default async function SecApplicationPage({
   params,
 }: {

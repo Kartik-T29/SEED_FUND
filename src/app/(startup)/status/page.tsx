@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { startupStatusView, isStatusUnlocked, listApplications } from '@/lib/access';
 import { ArrowLeft, FileText } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function StatusPage({
   searchParams,
 }: {

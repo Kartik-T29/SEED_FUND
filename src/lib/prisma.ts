@@ -6,7 +6,12 @@ const globalForPrisma = globalThis as unknown as {
 
 export function getPrismaClient(): PrismaClient {
   if (!globalForPrisma.prisma) {
-    globalForPrisma.prisma = new PrismaClient();
+    const url = process.env.DATABASE_URL;
+    globalForPrisma.prisma = new PrismaClient(
+      url
+        ? { datasources: { db: { url } } }
+        : { datasources: { db: { url: 'postgresql://placeholder:placeholder@localhost:5432/placeholder' } } }
+    );
   }
   return globalForPrisma.prisma;
 }

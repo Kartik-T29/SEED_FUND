@@ -4,6 +4,8 @@ import { getApplication } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import FormBPrintClient from './FormBPrintClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function FormBPrintPage({ params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || session.role !== 'ADMIN') redirect('/login');

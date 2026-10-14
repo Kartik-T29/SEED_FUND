@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { listApplicationsByTier, tierCounts } from '@/lib/access';
 import SecDashboardClient from './SecDashboardClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function SECDashboard() {
   const session = await getSession();
   if (!session || session.role !== 'SEC_MEMBER') redirect('/login');

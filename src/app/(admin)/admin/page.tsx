@@ -4,6 +4,8 @@ import { listApplicationsByTier, tierCounts } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import AdminDashboardClient from './AdminDashboardClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminDashboard() {
   const session = await getSession();
   if (!session || session.role !== 'ADMIN') redirect('/login');

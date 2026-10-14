@@ -7,6 +7,8 @@ import { BUDGET_HEADERS, LEVELS, TRACK_LABELS } from '@/lib/seedfund-constants';
 import { SEC_QUESTIONS, FLAT_SEC_QUESTIONS } from '@/lib/sec-questions';
 import FormAPrintClient from './FormAPrintClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function FormAPrintPage({ params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || (session.role !== 'SEC_MEMBER' && session.role !== 'ADMIN')) redirect('/login');

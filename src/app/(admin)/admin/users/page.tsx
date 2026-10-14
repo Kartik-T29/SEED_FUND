@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { adminListUsers } from '@/lib/access';
 import UsersManagementClient from './UsersManagementClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminUsersPage() {
   const session = await getSession();
   if (!session || session.role !== 'ADMIN') {

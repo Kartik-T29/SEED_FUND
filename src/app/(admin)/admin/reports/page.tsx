@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { adminGetReports, adminGetAuditLogs, adminListUsers } from '@/lib/access';
 import ReportsClient from './ReportsClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminReportsPage() {
   const session = await getSession();
   if (!session || session.role !== 'ADMIN') {

@@ -55,6 +55,7 @@ test-*.ts
 *.spec.*
 *.dump
 *.sql
+!prisma/migrations/**/*.sql
 *.sqlite
 *.sqlite3
 

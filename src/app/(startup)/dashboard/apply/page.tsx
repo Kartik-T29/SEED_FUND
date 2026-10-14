@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { getOrCreateDraft, getStartupApplication } from '@/lib/access';
 import ApplicationWizard from './ApplicationWizard';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardApplyPage({
   searchParams,
 }: {
