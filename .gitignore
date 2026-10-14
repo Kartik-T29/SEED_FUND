@@ -9,36 +9,71 @@
 !.yarn/sdks
 !.yarn/versions
 
-# testing
-/coverage
+# environment files (all environments except .env.example)
+.env
+.env.*
+!.env.example
 
-# next.js
+# credentials & secrets
+credentials.txt
+*.key
+*.pem
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# build & production outputs
 /.next/
 /out/
-
-# production
 /build
+/dist
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
-.DS_Store
-*.pem
-
-# debug
+# logs & debugging
+*.log
+*.log*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env
-.env*.local
+# testing, scratch & temporary scripts
+/coverage
+/tests/
+tests/
+__tests__/
+src/__tests__/
+scratch/
+tmp/
+debug/
+playground/
+test-flow.ts
+test-*.js
+test-*.ts
+*.test.*
+*.spec.*
+*.dump
+*.sql
+*.sqlite
+*.sqlite3
 
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# operating system & IDEs
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # file uploads storage
 /uploads
 uploads/
+
+# hosting
+.vercel
