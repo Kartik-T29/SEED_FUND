@@ -37,15 +37,37 @@ A production-ready multi-role web application for IDEAPAD (A Business Incubator 
    npm run dev
    ```
 
-## Roles & Demo Accounts
+## Roles & Authentication
 
-All seeded accounts have the password: `Admin@IdeaPad2024` or similar, except the startup which is `Startup@123`.
+The portal supports three distinct roles with server-enforced authorization boundaries:
 
-- **Admin**: `admin@ideapad.co.in` (Password: `Admin@IdeaPad2024`)
-- **SEC Member 1**: `sec1@ideapad.co.in` (Password: `Sec1@IdeaPad2024`)
-- **Startup**: `startup1@test.com` (Password: `Startup@123`)
+- **Startup**: Register, create application, save drafts, accept agreement, submit once, and view status.
+- **SEC Member (3 members)**: Evaluates submitted applications via Form A (pre-checks, TRL/MRL/IRL status levels, shared milestones, 12 feasibility questions, evaluation decision, and itemized budget suggestions).
+- **Admin**: Views consolidated SEC report, reviews committee consensus, and completes Form B (Grant Evaluation Report).
 
-Upon first login for Admin and SEC roles, the system forces a password change.
+### Environment Configuration
+
+Configure the following environment variables in `.env` (refer to `.env.example`):
+
+- `DATABASE_URL`: PostgreSQL connection string
+- `JWT_SECRET`: Cryptographically strong random secret (min 32 characters)
+- `SESSION_COOKIE_NAME`: Session cookie identifier (default: `ideapad_session`)
+- `ADMIN_EMAIL`: Initial admin email address
+- `ADMIN_PASSWORD`: Initial admin password (password change enforced on first login)
+- `SEC_MEMBER_1_EMAIL`: First SEC member email
+- `SEC_MEMBER_1_PASSWORD`: First SEC member initial password
+- `SEC_MEMBER_2_EMAIL`: Second SEC member email
+- `SEC_MEMBER_2_PASSWORD`: Second SEC member initial password
+- `SEC_MEMBER_3_EMAIL`: Third SEC member email
+- `SEC_MEMBER_3_PASSWORD`: Third SEC member initial password
+- `UPLOAD_DIR`: Path for document uploads (default: `./uploads`)
+- `MAX_FILE_SIZE_MB`: Maximum upload file size in MB (default: `5`)
+- `SMTP_ENABLED`: Set to `true` to enable email notifications
+- `SMTP_HOST`: SMTP server hostname
+- `SMTP_PORT`: SMTP server port (default: `587`)
+- `SMTP_USER`: SMTP username
+- `SMTP_PASS`: SMTP password
+- `SMTP_FROM`: Outgoing sender address
 
 ## Key Features Implemented
 

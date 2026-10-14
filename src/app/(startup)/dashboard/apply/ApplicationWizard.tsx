@@ -421,7 +421,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
     // 4. Budget
     const hasBudgetRows = budgetItems.length > 0;
     const hasQuotationsForEquipment = budgetItems
-      .filter((b) => b.header === 'equipment')
+      .filter((b) => b.header?.toLowerCase() === 'equipment')
       .every(() => documents.some((d) => d.type === 'QUOTATION'));
     const isContingencyOk = !isContingencyBlocked;
     const isRangeOk = !isTotalOutOfRange;
@@ -1758,6 +1758,69 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 </div>
               </div>
             )}
+
+            {/* Equipment Quotations */}
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">
+                    Equipment Quotations {budgetItems.some((b) => b.header?.toLowerCase() === 'equipment') && <span className="text-danger">*</span>}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {budgetItems.some((b) => b.header?.toLowerCase() === 'equipment')
+                      ? 'Required because you have added Equipment / Capital items in your budget (Step 4).'
+                      : 'Upload vendor quotation PDFs or images if your experiment requires equipment purchase.'}
+                  </p>
+                </div>
+                {documents.some((d) => d.type === 'QUOTATION') && (
+                  <Badge variant="success">Uploaded ({documents.filter((d) => d.type === 'QUOTATION').length})</Badge>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 items-center">
+                {documents
+                  .filter((d) => d.type === 'QUOTATION')
+                  .map((q) => (
+                    <div
+                      key={q.id}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-md text-xs text-gray-800"
+                    >
+                      <FileText className="w-4 h-4 text-brand-primary" />
+                      <span>Quotation ({new Date(q.createdAt).toLocaleDateString()})</span>
+                      <a
+                        href={`/api/documents/${q.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-brand-primary hover:underline ml-1"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDocument(q.id)}
+                          className="text-danger hover:text-red-700 ml-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                {!isReadOnly && (
+                  <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 cursor-pointer shadow-sm">
+                    <FileUp className="w-4 h-4 text-brand-primary" />
+                    Upload Quotation
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e, 'QUOTATION')}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
 
             {/* Team Members List */}
             <div className="space-y-4">
