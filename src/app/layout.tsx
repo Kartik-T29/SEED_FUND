@@ -22,6 +22,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="font-sans min-h-screen flex flex-col">
+        {process.env.DEMO_MODE !== 'false' && (
+          <aside aria-label="Demo environment notice" className="bg-amber-400 text-amber-950 text-xs py-1.5 px-4 text-center font-semibold tracking-wide border-b border-amber-500 no-print">
+            ⚠️ DEMO EVALUATION DEPLOYMENT — For testing only. Do not upload confidential identity records.
+          </aside>
+        )}
         <Navbar />
         <main className="flex-1">
           {children}
