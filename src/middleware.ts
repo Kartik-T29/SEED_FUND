@@ -21,14 +21,32 @@ const roleRoutes: Record<string, string[]> = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public assets and API auth routes
+  // Handle CORS preflight
+  const origin = request.headers.get('origin');
+  const allowedOrigin = process.env.FRONTEND_URL;
+
+  if (request.method === 'OPTIONS') {
+    const res = new NextResponse(null, { status: 204 });
+    if (origin && allowedOrigin && origin === allowedOrigin) {
+      res.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+      res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-action');
+      res.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
+    return res;
+  }
+
+  // Allow public assets, API auth routes, and health check
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
+    pathname === '/api/health' ||
     pathname === '/favicon.ico' ||
     pathname.startsWith('/logo')
   ) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    addSecurityHeaders(res, origin);
+    return res;
   }
 
   // Check for session token
@@ -113,7 +131,7 @@ export async function middleware(request: NextRequest) {
   }
 }
 
-function addSecurityHeaders(response: NextResponse) {
+function addSecurityHeaders(response: NextResponse, origin?: string | null) {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -121,6 +139,11 @@ function addSecurityHeaders(response: NextResponse) {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (process.env.NODE_ENV === 'production') {
     response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  const allowedOrigin = process.env.FRONTEND_URL;
+  if (origin && allowedOrigin && origin === allowedOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
   }
 }
 

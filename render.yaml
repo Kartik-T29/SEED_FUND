@@ -1,0 +1,62 @@
+services:
+  - type: web
+    name: ideapad-seed-fund
+    runtime: node
+    plan: free
+    branch: deploy/render-temp
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ideapad-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: SESSION_COOKIE_NAME
+        value: ideapad_session
+      - key: DEMO_MODE
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SEC_MEMBER_1_EMAIL
+        sync: false
+      - key: SEC_MEMBER_1_PASSWORD
+        sync: false
+      - key: SEC_MEMBER_2_EMAIL
+        sync: false
+      - key: SEC_MEMBER_2_PASSWORD
+        sync: false
+      - key: SEC_MEMBER_3_EMAIL
+        sync: false
+      - key: SEC_MEMBER_3_PASSWORD
+        sync: false
+      - key: SMTP_ENABLED
+        value: "false"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: "noreply@ideapad.co.in"
+      - key: UPLOAD_DIR
+        value: "./uploads"
+      - key: MAX_FILE_SIZE_MB
+        value: "5"
+
+databases:
+  - name: ideapad-db
+    plan: free
+    databaseName: ideapad_seed_fund
+    user: ideapad
