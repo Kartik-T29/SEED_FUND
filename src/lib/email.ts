@@ -24,9 +24,21 @@ const BODIES: Record<NotificationType, (data: NotificationData) => string> = {
     `Dear Applicant,\n\nA decision has been made on your seed fund application (ID: ${data.applicationId}).\n\nDecision: ${data.decision}\n\nPlease log in to view the details.\n\nBest regards,\nIDEAPAD Team`,
 };
 
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return '****';
+  const [user, domain] = email.split('@');
+  return `${user.slice(0, 2)}***@${domain}`;
+}
+
 export async function sendNotification(type: NotificationType, data: NotificationData): Promise<void> {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!data.to || !emailRegex.test(data.to.trim())) {
+    console.error(`[Email Error] Invalid recipient email address`);
+    return;
+  }
+
   if (process.env.SMTP_ENABLED !== 'true') {
-    console.log(`[Email Skipped] ${type}: to=${data.to}, app=${data.applicationId}`);
+    console.log(`[Email Skipped] ${type}: to=${maskEmail(data.to)}, app=${data.applicationId}`);
     return;
   }
 
@@ -43,13 +55,13 @@ export async function sendNotification(type: NotificationType, data: Notificatio
 
     await transporter.sendMail({
       from: process.env.SMTP_FROM || 'noreply@ideapad.co.in',
-      to: data.to,
+      to: data.to.trim(),
       subject: SUBJECTS[type],
       text: BODIES[type](data),
     });
 
-    console.log(`[Email Sent] ${type}: to=${data.to}`);
-  } catch (error) {
-    console.error(`[Email Error] ${type}:`, error);
+    console.log(`[Email Sent] ${type}: to=${maskEmail(data.to)}`);
+  } catch (error: any) {
+    console.error(`[Email Error] ${type}: ${error?.message || 'Failed to send'}`);
   }
 }

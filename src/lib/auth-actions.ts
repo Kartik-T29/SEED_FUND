@@ -1,10 +1,24 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import prisma from '@/lib/db';
 import { hashPassword, verifyPassword, createSession, setSessionCookie, clearSessionCookie } from '@/lib/auth';
 import { loginSchema, registerSchema } from '@/lib/validations';
-import { checkRateLimit } from '@/lib/rate-limit';
+import { checkRateLimit, resetRateLimit } from '@/lib/rate-limit';
+
+async function getClientIp(): Promise<string> {
+  try {
+    const h = await headers();
+    const forwarded = h.get('x-forwarded-for');
+    if (forwarded) {
+      return forwarded.split(',')[0].trim();
+    }
+    return h.get('x-real-ip') || '127.0.0.1';
+  } catch {
+    return '127.0.0.1';
+  }
+}
 
 export async function login(formData: FormData) {
   const data = Object.fromEntries(formData.entries());
@@ -15,20 +29,28 @@ export async function login(formData: FormData) {
   }
 
   const { email, password } = result.data;
-  const ip = 'anonymous'; 
+  const ip = await getClientIp();
+  const rateLimitKey = `${ip}:${email.toLowerCase().trim()}`;
   
-  const { allowed, remainingAttempts } = checkRateLimit(`${ip}:${email}`);
+  const { allowed } = checkRateLimit(rateLimitKey);
   if (!allowed) {
     return { error: 'Too many login attempts. Please try again in 15 minutes.' };
   }
 
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { email: email.toLowerCase().trim() },
   });
 
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return { error: 'Invalid email or password', remainingAttempts };
+    return { error: 'Invalid email or password' };
   }
+
+  if (user.active === false) {
+    return { error: 'Your account has been deactivated. Please contact an administrator.' };
+  }
+
+  // Reset rate limit on successful authentication
+  resetRateLimit(rateLimitKey);
 
   const token = await createSession({
     userId: user.id,
@@ -50,41 +72,52 @@ export async function login(formData: FormData) {
 }
 
 export async function register(formData: FormData) {
+  const ip = await getClientIp();
+  const { allowed } = checkRateLimit(`register:${ip}`);
+  if (!allowed) {
+    return { error: 'Too many registration attempts. Please try again later.' };
+  }
+
   const data = Object.fromEntries(formData.entries());
   
   const result = registerSchema.safeParse(data);
   if (!result.success) {
+    const fieldErrors = result.error.flatten().fieldErrors;
+    const firstErrorMessage = result.error.errors[0]?.message || 'Invalid form data';
     return { 
-      error: 'Invalid form data', 
-      details: result.error.flatten().fieldErrors 
+      error: firstErrorMessage, 
+      details: fieldErrors 
     };
   }
 
   const { email, password, name, enrollmentNo, program, phone, teamName } = result.data;
 
   const existingUser = await prisma.user.findUnique({
-    where: { email },
+    where: { email: email.toLowerCase().trim() },
   });
 
   if (existingUser) {
-    return { error: 'User with this email already exists' };
+    return { 
+      error: 'An account with this email already exists',
+      details: { email: ['An account with this email already exists'] },
+    };
   }
 
   const passwordHash = await hashPassword(password);
 
   const user = await prisma.user.create({
     data: {
-      email,
-      name,
+      email: email.toLowerCase().trim(),
+      name: name.trim(),
       passwordHash,
       role: 'STARTUP',
       mustChangePassword: false,
       startup: {
         create: {
-          teamName,
-          enrollmentNo,
-          program,
-          phone,
+          teamName: teamName.trim(),
+          enrollmentNo: enrollmentNo.trim(),
+          program: program.trim(),
+          phone: phone.trim(),
         }
       }
     },

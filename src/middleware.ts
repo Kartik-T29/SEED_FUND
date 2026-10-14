@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-change-me-in-production');
+const rawJwtSecret = process.env.JWT_SECRET;
+if (!rawJwtSecret) {
+  throw new Error('FATAL: JWT_SECRET environment variable is required');
+}
+const JWT_SECRET = new TextEncoder().encode(rawJwtSecret);
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'ideapad_session';
 
 // Routes that don't require authentication
@@ -74,9 +78,20 @@ export async function middleware(request: NextRequest) {
     const allowedPrefixes = roleRoutes[role] || [];
     const hasAccess = allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
 
-    // Allow API routes for authenticated users (specific checks happen in the route handlers)
+    // Allow API routes for authenticated users (with defense-in-depth checks)
     if (pathname.startsWith('/api/')) {
-      return NextResponse.next();
+      if (pathname.includes('/zip') && role !== 'ADMIN') {
+        return new NextResponse('Not Found', { status: 404 });
+      }
+      if (pathname.includes('/pdf/form-b') && role !== 'ADMIN') {
+        return new NextResponse('Not Found', { status: 404 });
+      }
+      if (pathname.includes('/pdf/summary') && role === 'STARTUP') {
+        return new NextResponse('Not Found', { status: 404 });
+      }
+      const res = NextResponse.next();
+      addSecurityHeaders(res);
+      return res;
     }
 
     if (!hasAccess) {
@@ -87,12 +102,25 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    return NextResponse.next();
+    const res = NextResponse.next();
+    addSecurityHeaders(res);
+    return res;
   } catch {
     // Invalid token - clear and redirect to login
     const response = NextResponse.redirect(new URL('/login', request.url));
     response.cookies.delete(COOKIE_NAME);
     return response;
+  }
+}
+
+function addSecurityHeaders(response: NextResponse) {
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 }
 

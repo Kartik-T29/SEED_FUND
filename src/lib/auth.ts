@@ -3,7 +3,11 @@ import { hash, compare } from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { Role } from '@prisma/client';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-change-me-in-production');
+const rawJwtSecret = process.env.JWT_SECRET;
+if (!rawJwtSecret) {
+  throw new Error('FATAL: JWT_SECRET environment variable is required');
+}
+const JWT_SECRET = new TextEncoder().encode(rawJwtSecret);
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'ideapad_session';
 const SESSION_DURATION = 7 * 24 * 60 * 60; // 7 days in seconds
 
