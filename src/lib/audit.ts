@@ -5,6 +5,8 @@ export async function logAudit(
   action: string,
   entity: string,
   entityId: string,
+  reason?: string,
+  details?: any
 ): Promise<void> {
   try {
     await prisma.auditLog.create({
@@ -13,6 +15,8 @@ export async function logAudit(
         action,
         entity,
         entityId,
+        reason,
+        details,
       },
     });
   } catch (error) {

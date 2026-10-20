@@ -1,17 +1,17 @@
 # IDEAPAD Seed Fund Portal
 
-A production-ready multi-role web application for IDEAPAD (A Business Incubator of ITM Universe) to manage startup seed fund applications.
+A production-ready multi-role web application for IDEAPAD (A Business Incubator of ITM Universe) to manage startup seed fund applications, evaluations, and disbursements.
 
 ## Stack
 - Next.js 14+ (App Router, TypeScript)
 - Tailwind CSS
-- PostgreSQL 18
+- PostgreSQL
 - Prisma ORM
 - bcryptjs (auth) & jose (JWT)
 
 ## Setup Instructions
 
-1. **Install Prerequisites**: Node.js v22 and PostgreSQL are required.
+1. **Install Prerequisites**: Node.js v20+ and PostgreSQL are required.
 2. **Install Dependencies**:
    ```bash
    npm install
@@ -21,14 +21,17 @@ A production-ready multi-role web application for IDEAPAD (A Business Incubator 
    ```bash
    cp .env.example .env
    ```
-4. **Database Setup**:
-   Generate Prisma client and push the schema.
+4. **Database Setup & Migrations**:
+   Run database migrations to initialize the schema:
    ```bash
-   npx prisma generate
-   npx prisma db push
+   npm run build # runs prisma generate && prisma migrate deploy && next build
    ```
-5. **Seed the Database**:
-   Creates Admin, 3 SEC members, and a demo Startup.
+   Or locally for dev:
+   ```bash
+   npx prisma migrate dev
+   ```
+5. **Seed the Initial Admin**:
+   Seeds the initial administrator account from environment variables (`ADMIN_EMAIL` and `ADMIN_PASSWORD`):
    ```bash
    npm run db:seed
    ```
@@ -41,11 +44,17 @@ A production-ready multi-role web application for IDEAPAD (A Business Incubator 
 
 The portal supports three distinct roles with server-enforced authorization boundaries:
 
-- **Startup**: Register, create application, save drafts, accept agreement, submit once, and view status.
-- **SEC Member (3 members)**: Evaluates submitted applications via Form A (pre-checks, TRL/MRL/IRL status levels, shared milestones, 12 feasibility questions, evaluation decision, and itemized budget suggestions).
-- **Admin**: Views consolidated SEC report, reviews committee consensus, and completes Form B (Grant Evaluation Report).
+- **Startup**: Register via `/register`, create applications, save drafts, accept agreements, submit, and track review status.
+- **SEC Member (Seed Evaluation Committee)**:
+  - Self-registers via `/sec/register`.
+  - New SEC accounts are created in `PENDING` status and require Administrator approval before gaining access to the evaluation dashboard.
+  - Optional invite code protection via `SEC_INVITE_CODE` environment variable.
+  - Approved SEC members evaluate applications via Form A (pre-checks, TRL/MRL/IRL maturity levels, shared committee milestones, 12 feasibility questions, and budget recommendations).
+- **Admin**:
+  - Approves, rejects, or deactivates SEC member accounts via the User Management panel with audit logging.
+  - Views the consolidated SEC report, committee reviews, and sanctions Form B (Grant Evaluation Report).
 
-### Environment Configuration
+## Environment Configuration
 
 Configure the following environment variables in `.env` (refer to `.env.example`):
 
@@ -54,12 +63,10 @@ Configure the following environment variables in `.env` (refer to `.env.example`
 - `SESSION_COOKIE_NAME`: Session cookie identifier (default: `ideapad_session`)
 - `ADMIN_EMAIL`: Initial admin email address
 - `ADMIN_PASSWORD`: Initial admin password (password change enforced on first login)
-- `SEC_MEMBER_1_EMAIL`: First SEC member email
-- `SEC_MEMBER_1_PASSWORD`: First SEC member initial password
-- `SEC_MEMBER_2_EMAIL`: Second SEC member email
-- `SEC_MEMBER_2_PASSWORD`: Second SEC member initial password
-- `SEC_MEMBER_3_EMAIL`: Third SEC member email
-- `SEC_MEMBER_3_PASSWORD`: Third SEC member initial password
+- `SEC_INVITE_CODE`: Optional invite code for SEC member registration (if set, registration requires this code)
+- `FRONTEND_URL`: Public domain URL of the deployed application (for CORS and proxy headers)
+- `PORT`: Port on which the application server listens (default: `3000`)
+- `NODE_ENV`: Set to `production` in production deployment
 - `UPLOAD_DIR`: Path for document uploads (default: `./uploads`)
 - `MAX_FILE_SIZE_MB`: Maximum upload file size in MB (default: `5`)
 - `SMTP_ENABLED`: Set to `true` to enable email notifications
@@ -69,10 +76,10 @@ Configure the following environment variables in `.env` (refer to `.env.example`
 - `SMTP_PASS`: SMTP password
 - `SMTP_FROM`: Outgoing sender address
 
-## Key Features Implemented
+## Deployment Behind Cloudflare / University Reverse Proxy
 
-1. **Role-Based Isolation**: Startups, SEC Members, and Admins have completely separated routing boundaries and dashboards (`/dashboard`, `/review`, `/admin`). Middleware protects all routes.
-2. **Branding**: The UI is themed precisely using colors extracted from the provided `IdeaPadLogo.png`.
-3. **Multi-Step Form**: The infrastructure for the 10-step form is prepared.
-4. **Audit & Testing**: Foundational rules are written in Vitest (`src/__tests__`).
-5. **Authentication**: Fully functioning email/password auth using bcryptjs and secure HTTP-only cookies.
+When deploying on a university server behind Cloudflare or a reverse proxy:
+1. **Health Check Endpoint**: `/health` (and `/api/health`) responds with `200 OK` JSON without touching sensitive data or the database.
+2. **Client IP Resolution**: Rate limiters and audit logs inspect the `CF-Connecting-IP` header first, falling back to `X-Forwarded-For` and `X-Real-IP`.
+3. **Secure Cookies & HTTPS**: When `NODE_ENV=production`, session cookies are marked `Secure`, `HttpOnly`, with `SameSite=Lax`.
+4. **Binding**: The server binds to `0.0.0.0` and listens on `process.env.PORT || 3000`.
