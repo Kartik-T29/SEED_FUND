@@ -18,6 +18,7 @@ import {
   setMilestoneStateAction,
   addMilestoneRemarkAction,
   submitMilestoneAction,
+  saveStatusLevelsAction,
 } from '../../actions';
 import {
   CheckCircle2,
@@ -168,14 +169,31 @@ export default function SecAssessmentFormClient({
     const map: Record<string, string> = {};
     if (initialMilestone?.items) {
       for (const item of initialMilestone.items) {
-        const myRem = item.remarks?.find((r: any) => r.memberId === currentMember.id);
+        const myRem = item.remarks?.find((r: any) => r.memberId === currentMember?.id);
         if (myRem) map[item.id] = myRem.remark;
       }
     }
     return map;
   });
 
-  const isMilestoneOwner = milestone?.ownerId === currentMember.id;
+  // Keep milestone state synchronized when initialMilestone prop updates from server
+  useEffect(() => {
+    if (initialMilestone) {
+      setMilestone(initialMilestone);
+      if (initialMilestone.items) {
+        setMyMilestoneRemarks((prev) => {
+          const map = { ...prev };
+          for (const item of initialMilestone.items) {
+            const myRem = item.remarks?.find((r: any) => r.memberId === currentMember?.id);
+            if (myRem) map[item.id] = myRem.remark;
+          }
+          return map;
+        });
+      }
+    }
+  }, [initialMilestone, currentMember?.id]);
+
+  const isMilestoneOwner = Boolean(milestone?.ownerId && currentMember?.id && milestone.ownerId === currentMember.id);
   const isMilestoneSubmitted = milestone?.status === 'SUBMITTED';
 
   // Error & Status message
@@ -291,21 +309,55 @@ export default function SecAssessmentFormClient({
     startTransition(async () => {
       try {
         const res = await claimMilestoneAction(application.id, selectedTrack, []);
-        setMilestone(res.milestone);
+        if (res.milestone) {
+          setMilestone(res.milestone);
+          setStatusMessage({ type: 'success', text: 'Milestone evaluation claimed and initialized.' });
+        }
         router.refresh();
       } catch (e: any) {
-        alert(e.message || 'Failed to claim milestone ownership.');
+        setStatusMessage({ type: 'error', text: e.message || 'Failed to claim milestone ownership.' });
       }
     });
   };
 
-  const handleUpdateMilestoneState = async (itemId: string, state: any, ownerRemark?: string) => {
+  const handleUpdateMilestoneState = async (itemId: string, newState: any, ownerRemark?: string) => {
+    // Optimistic local state update so UI responds instantly without snapping back
+    setMilestone((prev: any) => {
+      if (!prev || !prev.items) return prev;
+      return {
+        ...prev,
+        items: prev.items.map((item: any) => {
+          if (item.id === itemId) {
+            return {
+              ...item,
+              state: newState,
+              ownerRemark: ownerRemark !== undefined ? ownerRemark : item.ownerRemark,
+            };
+          }
+          return item;
+        }),
+      };
+    });
+
+    const currentItem = milestone?.items?.find((i: any) => i.id === itemId);
+    const expectedUpdatedAt = currentItem?.updatedAt;
+
     startTransition(async () => {
       try {
-        await setMilestoneStateAction(itemId, state, ownerRemark, application.id);
+        const res = await setMilestoneStateAction(itemId, newState, ownerRemark, application.id, expectedUpdatedAt);
+        if (res.updatedItem) {
+          setMilestone((prev: any) => {
+            if (!prev || !prev.items) return prev;
+            return {
+              ...prev,
+              items: prev.items.map((item: any) => item.id === itemId ? { ...item, ...res.updatedItem } : item),
+            };
+          });
+        }
         router.refresh();
       } catch (e: any) {
-        alert(e.message || 'Failed to update milestone state.');
+        setStatusMessage({ type: 'error', text: e.message || 'Failed to update milestone state.' });
+        router.refresh();
       }
     });
   };
@@ -316,10 +368,43 @@ export default function SecAssessmentFormClient({
 
     startTransition(async () => {
       try {
-        await addMilestoneRemarkAction(itemId, remark, application.id);
+        const res = await addMilestoneRemarkAction(itemId, remark, application.id);
+        if (res.remark) {
+          setMilestone((prev: any) => {
+            if (!prev || !prev.items) return prev;
+            return {
+              ...prev,
+              items: prev.items.map((item: any) => {
+                if (item.id === itemId) {
+                  const existingRemarks = item.remarks || [];
+                  const filtered = existingRemarks.filter((r: any) => r.memberId !== currentMember?.id);
+                  return {
+                    ...item,
+                    remarks: [...filtered, res.remark],
+                  };
+                }
+                return item;
+              }),
+            };
+          });
+          setStatusMessage({ type: 'success', text: 'Remark saved successfully.' });
+        }
         router.refresh();
       } catch (e: any) {
-        alert(e.message || 'Failed to save remark.');
+        setStatusMessage({ type: 'error', text: e.message || 'Failed to save remark.' });
+      }
+    });
+  };
+
+  const handleStatusLevelChange = async (dim: 'trl' | 'mrl' | 'irl', level: number) => {
+    const nextStatusForm = { ...statusForm, [dim]: level };
+    setStatusForm(nextStatusForm);
+
+    startTransition(async () => {
+      try {
+        await saveStatusLevelsAction(application.id, nextStatusForm);
+      } catch (e: any) {
+        console.error('Failed to auto-save status level:', e);
       }
     });
   };
@@ -329,9 +414,10 @@ export default function SecAssessmentFormClient({
     startTransition(async () => {
       try {
         await submitMilestoneAction(application.id);
+        setStatusMessage({ type: 'success', text: 'Milestone evaluation submitted and locked successfully.' });
         router.refresh();
       } catch (e: any) {
-        alert(e.message || 'Failed to submit milestone.');
+        setStatusMessage({ type: 'error', text: e.message || 'Failed to submit milestone.' });
       }
     });
   };
@@ -797,7 +883,7 @@ export default function SecAssessmentFormClient({
                             name="trl_level"
                             disabled={isSubmitted}
                             checked={statusForm.trl === lvlNum}
-                            onChange={() => setStatusForm({ ...statusForm, trl: lvlNum })}
+                            onChange={() => handleStatusLevelChange('trl', lvlNum)}
                             className="mt-0.5 text-brand-primary"
                           />
                           <div>
@@ -834,7 +920,7 @@ export default function SecAssessmentFormClient({
                             name="mrl_level"
                             disabled={isSubmitted}
                             checked={statusForm.mrl === lvlNum}
-                            onChange={() => setStatusForm({ ...statusForm, mrl: lvlNum })}
+                            onChange={() => handleStatusLevelChange('mrl', lvlNum)}
                             className="mt-0.5 text-brand-primary"
                           />
                           <div>
@@ -871,7 +957,7 @@ export default function SecAssessmentFormClient({
                             name="irl_level"
                             disabled={isSubmitted}
                             checked={statusForm.irl === lvlNum}
-                            onChange={() => setStatusForm({ ...statusForm, irl: lvlNum })}
+                            onChange={() => handleStatusLevelChange('irl', lvlNum)}
                             className="mt-0.5 text-brand-primary"
                           />
                           <div>
@@ -948,7 +1034,8 @@ export default function SecAssessmentFormClient({
                   {/* Milestones List */}
                   <div className="space-y-3">
                     {milestone.items?.map((item: any) => {
-                      const otherRemarks = item.remarks?.filter((r: any) => r.memberId !== currentMember.id) || [];
+                      const otherRemarks = item.remarks?.filter((r: any) => r.memberId !== currentMember?.id) || [];
+                      const mySavedRemark = item.remarks?.find((r: any) => r.memberId === currentMember?.id);
                       return (
                         <div key={item.id} className="p-3 border rounded-lg bg-white space-y-2 shadow-2xs">
                           <div className="flex items-center justify-between gap-2">
@@ -957,7 +1044,7 @@ export default function SecAssessmentFormClient({
                               <select
                                 value={item.state}
                                 onChange={(e) => handleUpdateMilestoneState(item.id, e.target.value as any, item.ownerRemark)}
-                                className="text-[11px] border rounded px-2 py-1 bg-white font-medium"
+                                className="text-[11px] border rounded px-2 py-1 bg-white font-medium cursor-pointer"
                               >
                                 <option value="PENDING">PENDING</option>
                                 <option value="IN_PROGRESS">IN_PROGRESS</option>
@@ -974,6 +1061,7 @@ export default function SecAssessmentFormClient({
                           {isMilestoneOwner && !isMilestoneSubmitted ? (
                             <div>
                               <input
+                                key={item.id + '-' + (item.ownerRemark || '')}
                                 type="text"
                                 defaultValue={item.ownerRemark || ''}
                                 onBlur={(e) => handleUpdateMilestoneState(item.id, item.state, e.target.value)}
@@ -992,6 +1080,13 @@ export default function SecAssessmentFormClient({
                           {/* Committee Member Remarks */}
                           <div className="pt-2 border-t space-y-1.5">
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Committee Remarks</span>
+                            
+                            {mySavedRemark && (
+                              <p className="text-[11px] text-blue-900 bg-blue-50/80 p-2 rounded border border-blue-200">
+                                <span className="font-semibold text-blue-950">Your remark:</span> {mySavedRemark.remark}
+                              </p>
+                            )}
+
                             {otherRemarks.map((r: any) => (
                               <p key={r.id} className="text-[11px] text-gray-600 pl-2 border-l-2 border-gray-300">
                                 <strong>{r.member?.name}:</strong> {r.remark}

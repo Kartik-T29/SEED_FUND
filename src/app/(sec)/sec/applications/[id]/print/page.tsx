@@ -26,7 +26,7 @@ export default async function FormAPrintPage({ params }: { params: { id: string 
     }),
     getMilestoneAssessment({ userId: session.userId, role: session.role }, id),
     prisma.user.findMany({
-      where: { role: 'SEC_MEMBER', active: true },
+      where: { role: 'SEC_MEMBER', active: true, approvalStatus: 'APPROVED' },
       select: { id: true, name: true, designation: true, department: true },
       orderBy: { name: 'asc' },
     }),

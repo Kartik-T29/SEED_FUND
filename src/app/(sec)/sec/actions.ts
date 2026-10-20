@@ -44,17 +44,18 @@ export async function setMilestoneStateAction(
   itemId: string,
   state: MilestoneState,
   ownerRemark?: string,
-  applicationId?: string
+  applicationId?: string,
+  expectedUpdatedAt?: string | Date
 ) {
   const session = await getSession();
   if (!session || session.role !== 'SEC_MEMBER') throw new Error('Unauthorized');
 
-  await accessSetMilestoneState(session, itemId, state, ownerRemark);
+  const updatedItem = await accessSetMilestoneState(session, itemId, state, ownerRemark, expectedUpdatedAt);
   if (applicationId) {
     revalidatePath(`/sec/applications/${applicationId}`);
     revalidatePath(`/sec/${applicationId}`);
   }
-  return { success: true };
+  return { success: true, updatedItem };
 }
 
 export async function addMilestoneRemarkAction(
@@ -65,12 +66,29 @@ export async function addMilestoneRemarkAction(
   const session = await getSession();
   if (!session || session.role !== 'SEC_MEMBER') throw new Error('Unauthorized');
 
-  await accessAddMilestoneRemark(session, itemId, remark);
+  const remarkRecord = await accessAddMilestoneRemark(session, itemId, remark);
   if (applicationId) {
     revalidatePath(`/sec/applications/${applicationId}`);
     revalidatePath(`/sec/${applicationId}`);
   }
-  return { success: true };
+  return { success: true, remark: remarkRecord };
+}
+
+export async function saveStatusLevelsAction(
+  applicationId: string,
+  statusForm: { trl: number; mrl: number; irl: number }
+) {
+  const session = await getSession();
+  if (!session || session.role !== 'SEC_MEMBER') throw new Error('Unauthorized');
+
+  const assessment = await accessSaveAssessment(
+    session,
+    applicationId,
+    { statusForm },
+    false
+  );
+  revalidatePath(`/sec/applications/${applicationId}`);
+  return { success: true, assessment };
 }
 
 export async function submitMilestoneAction(applicationId: string) {

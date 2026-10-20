@@ -2,12 +2,21 @@ import { getSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { listApplicationsByTier, tierCounts } from '@/lib/access';
 import SecDashboardClient from './SecDashboardClient';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SECDashboard() {
   const session = await getSession();
   if (!session || session.role !== 'SEC_MEMBER') redirect('/login');
+
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, active: true, approvalStatus: true },
+  });
+  if (!currentUser || !currentUser.active || currentUser.approvalStatus !== 'APPROVED') {
+    redirect('/login');
+  }
 
   const [applications, summary] = await Promise.all([
     listApplicationsByTier({ userId: session.userId, role: session.role }),

@@ -22,9 +22,13 @@ export default async function SecApplicationPage({
     getMilestoneAssessment({ userId: session.userId, role: session.role }, id),
     prisma.user.findUnique({
       where: { id: session.userId },
-      select: { id: true, name: true, designation: true, department: true },
+      select: { id: true, name: true, designation: true, department: true, active: true, approvalStatus: true },
     }),
   ]);
+
+  if (!currentMember || !currentMember.active || currentMember.approvalStatus !== 'APPROVED') {
+    redirect('/login');
+  }
 
   return (
     <div className="w-full h-[calc(100vh-64px)] overflow-hidden">

@@ -94,7 +94,7 @@ export async function listApplicationsByTier(s: Session, tier?: string) {
       _count: {
         select: {
           assessments: {
-            where: { status: "SUBMITTED", outdated: false, member: { active: true } },
+            where: { status: "SUBMITTED", outdated: false, member: { active: true, approvalStatus: "APPROVED" } },
           },
         },
       },
@@ -140,7 +140,7 @@ export async function tierCounts(s: Session) {
     },
   });
 
-  const activeSecCount = await prisma.user.count({ where: { role: "SEC_MEMBER", active: true } });
+  const activeSecCount = await prisma.user.count({ where: { role: "SEC_MEMBER", active: true, approvalStatus: "APPROVED" } });
 
   const counts: Record<string, {
     key: string;
@@ -881,7 +881,10 @@ export async function claimMilestone(s: Session, applicationId: string, track: s
         items: { create: finalNames.map((name) => ({ name })) },
       },
       include: {
-        items: { include: { remarks: { include: { member: { select: { id: true, name: true } } } } } },
+        items: {
+          orderBy: { id: "asc" },
+          include: { remarks: { include: { member: { select: { id: true, name: true } } } } },
+        },
         owner: { select: { id: true, name: true } },
       },
     });
@@ -897,8 +900,10 @@ export async function getMilestoneAssessment(s: Session, applicationId: string) 
     where: { applicationId },
     include: {
       items: {
+        orderBy: { id: "asc" },
         include: {
           remarks: {
+            orderBy: { updatedAt: "asc" },
             include: { member: { select: { id: true, name: true, designation: true } } },
           },
         },
@@ -913,15 +918,32 @@ export async function setMilestoneState(
   s: Session,
   itemId: string,
   state: "COMPLETED" | "PENDING" | "IN_PROGRESS",
-  ownerRemark?: string
+  ownerRemark?: string,
+  expectedUpdatedAt?: string | Date
 ) {
   requireRole(s, "SEC_MEMBER");
   const item = await prisma.milestoneItem.findUnique({ where: { id: itemId }, include: { milestone: true } });
   if (!item || item.milestone.ownerId !== s.userId) throw new Forbidden("OWNER_ONLY");
   if (item.milestone.status === "SUBMITTED") throw new Forbidden("LOCKED");
 
-  await prisma.$transaction([
-    prisma.milestoneItem.update({ where: { id: itemId }, data: { state, ownerRemark } }),
+  if (expectedUpdatedAt) {
+    const expectedTime = new Date(expectedUpdatedAt).getTime();
+    const actualTime = new Date(item.updatedAt).getTime();
+    if (Math.abs(actualTime - expectedTime) > 2000) {
+      throw new Error("CONCURRENT_EDIT_CONFLICT: This milestone item was modified in another session. Please refresh the page.");
+    }
+  }
+
+  const [updatedItem] = await prisma.$transaction([
+    prisma.milestoneItem.update({
+      where: { id: itemId },
+      data: { state, ownerRemark },
+      include: {
+        remarks: {
+          include: { member: { select: { id: true, name: true, designation: true } } },
+        },
+      },
+    }),
     prisma.milestoneEditLog.create({
       data: {
         milestoneId: item.milestoneId,
@@ -931,7 +953,13 @@ export async function setMilestoneState(
         newValue: state,
       },
     }),
+    prisma.milestoneAssessment.update({
+      where: { id: item.milestoneId },
+      data: { updatedAt: new Date() },
+    }),
   ]);
+
+  return updatedItem;
 }
 
 export async function addMilestoneRemark(s: Session, itemId: string, remark: string) {
@@ -943,11 +971,14 @@ export async function addMilestoneRemark(s: Session, itemId: string, remark: str
   if (!item) throw new Forbidden("NOT_FOUND");
   if (item.milestone.application.evaluation) throw new Forbidden("LOCKED_BY_FORM_B");
 
-  await prisma.milestoneRemark.upsert({
+  const saved = await prisma.milestoneRemark.upsert({
     where: { itemId_memberId: { itemId, memberId: s.userId } },
     create: { itemId, memberId: s.userId, remark },
     update: { remark },
+    include: { member: { select: { id: true, name: true, designation: true } } },
   });
+
+  return saved;
 }
 
 export async function submitMilestone(s: Session, applicationId: string) {
@@ -988,7 +1019,7 @@ export async function formBReadiness(sOrAppId: any, maybeAppId?: string) {
 
   const [activeMembers, submitted, ms] = await Promise.all([
     prisma.user.findMany({
-      where: { role: "SEC_MEMBER", active: true },
+      where: { role: "SEC_MEMBER", active: true, approvalStatus: "APPROVED" },
       select: { id: true, name: true, designation: true },
     }),
     prisma.assessment.findMany({
@@ -996,7 +1027,7 @@ export async function formBReadiness(sOrAppId: any, maybeAppId?: string) {
         applicationId,
         status: "SUBMITTED",
         outdated: false,
-        member: { active: true },
+        member: { active: true, approvalStatus: "APPROVED" },
       },
       select: { memberId: true },
     }),
@@ -1915,10 +1946,6 @@ export async function adminCreateSecUser(
   requireRole(s, "ADMIN");
   if (!reason?.trim()) throw new Error("ADMIN_REASON_REQUIRED");
 
-  const activeSecCount = await prisma.user.count({ where: { role: "SEC_MEMBER", active: true } });
-  if (activeSecCount >= 3) {
-    throw new Error("MAX_3_ACTIVE_SEC_MEMBERS_REACHED");
-  }
   if (!data.password || data.password.length < 8) {
     throw new Error("PASSWORD_TOO_SHORT");
   }
@@ -1934,6 +1961,7 @@ export async function adminCreateSecUser(
       department: data.department?.trim() || null,
       passwordHash,
       role: "SEC_MEMBER",
+      approvalStatus: "APPROVED",
       active: true,
       mustChangePassword: true,
     },
@@ -1951,6 +1979,56 @@ export async function adminCreateSecUser(
   });
 
   const { passwordHash: _, ...safeUser } = user;
+  return safeUser;
+}
+
+export async function adminApproveSecUser(s: Session, userId: string, reason?: string) {
+  requireRole(s, "ADMIN");
+  const existing = await prisma.user.findUnique({ where: { id: userId, role: "SEC_MEMBER" } });
+  if (!existing) throw new Forbidden("NOT_FOUND");
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { approvalStatus: "APPROVED", active: true },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: s.userId,
+      action: "APPROVE_SEC_MEMBER",
+      entity: "User",
+      entityId: userId,
+      reason: reason?.trim() || "Approved by administrator",
+      details: { email: existing.email, name: existing.name },
+    },
+  });
+
+  const { passwordHash: _, ...safeUser } = updated;
+  return safeUser;
+}
+
+export async function adminRejectSecUser(s: Session, userId: string, reason?: string) {
+  requireRole(s, "ADMIN");
+  const existing = await prisma.user.findUnique({ where: { id: userId, role: "SEC_MEMBER" } });
+  if (!existing) throw new Forbidden("NOT_FOUND");
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { approvalStatus: "REJECTED", active: false },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: s.userId,
+      action: "REJECT_SEC_MEMBER",
+      entity: "User",
+      entityId: userId,
+      reason: reason?.trim() || "Rejected by administrator",
+      details: { email: existing.email, name: existing.name },
+    },
+  });
+
+  const { passwordHash: _, ...safeUser } = updated;
   return safeUser;
 }
 
@@ -1999,13 +2077,6 @@ export async function adminToggleUserActive(s: Session, userId: string, active: 
 
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) throw new Forbidden("NOT_FOUND");
-
-  if (active && existing.role === "SEC_MEMBER") {
-    const activeSecCount = await prisma.user.count({ where: { role: "SEC_MEMBER", active: true } });
-    if (activeSecCount >= 3) {
-      throw new Error("MAX_3_ACTIVE_SEC_MEMBERS_REACHED");
-    }
-  }
 
   const updated = await prisma.user.update({
     where: { id: userId },
