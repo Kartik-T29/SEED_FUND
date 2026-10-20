@@ -29,7 +29,7 @@ export default async function AdminApplicationDetailPage({
     getMilestoneAssessment({ userId: session.userId, role: session.role }, id),
     formBReadiness(id),
     prisma.user.findMany({
-      where: { role: 'SEC_MEMBER', active: true },
+      where: { role: 'SEC_MEMBER', active: true, approvalStatus: 'APPROVED' },
       select: { id: true, name: true, designation: true },
       orderBy: { name: 'asc' },
     }),

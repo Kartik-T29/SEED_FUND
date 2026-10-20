@@ -16,12 +16,15 @@ import {
   AlertTriangle,
   Copy,
   Sparkles,
+  Clock,
 } from 'lucide-react';
 import {
   createSecUserAction,
   updateUserAction,
   toggleUserActiveAction,
   resetUserPasswordAction,
+  approveSecUserAction,
+  rejectSecUserAction,
 } from '../actions';
 
 interface UserItem {
@@ -29,6 +32,7 @@ interface UserItem {
   email: string;
   name: string;
   role: 'ADMIN' | 'SEC_MEMBER' | 'STARTUP';
+  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   active: boolean;
   designation?: string | null;
   department?: string | null;
@@ -54,8 +58,9 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'ADMIN' | 'SEC_MEMBER' | 'STARTUP'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Active SEC count
-  const activeSecCount = users.filter((u) => u.role === 'SEC_MEMBER' && u.active).length;
+  // Active SEC count & Pending SEC count
+  const activeSecCount = users.filter((u) => u.role === 'SEC_MEMBER' && u.active && u.approvalStatus === 'APPROVED').length;
+  const pendingSecUsers = users.filter((u) => u.role === 'SEC_MEMBER' && u.approvalStatus === 'PENDING');
 
   // Modals state
   const [showAddSecModal, setShowAddSecModal] = useState(false);
@@ -143,10 +148,6 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
     e.preventDefault();
     if (!addSecForm.reason.trim()) {
       setError('Admin reason is required for creating a user');
-      return;
-    }
-    if (activeSecCount >= 3) {
-      setError('Cannot create active SEC member: maximum limit of 3 active members reached.');
       return;
     }
 
@@ -241,6 +242,45 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
     );
   };
 
+  const handleApproveSec = async (userId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await approveSecUserAction(userId, 'Approved by admin via User Management');
+      if (res.success && res.user) {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, approvalStatus: 'APPROVED', active: true } : u))
+        );
+        setSuccessMessage('SEC member approved successfully. They can now log in.');
+        router.refresh();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to approve SEC member');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectSec = async (userId: string) => {
+    if (!confirm('Are you sure you want to reject this SEC member application?')) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await rejectSecUserAction(userId, 'Rejected by admin via User Management');
+      if (res.success && res.user) {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, approvalStatus: 'REJECTED', active: false } : u))
+        );
+        setSuccessMessage('SEC member application rejected.');
+        router.refresh();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to reject SEC member');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleToggleActive = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!toggleActiveUser) return;
@@ -250,10 +290,6 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
     }
 
     const nextState = !toggleActiveUser.active;
-    if (nextState && toggleActiveUser.role === 'SEC_MEMBER' && activeSecCount >= 3) {
-      setError('Cannot activate member: maximum limit of 3 active SEC members reached.');
-      return;
-    }
 
     setLoading(true);
     setError(null);
@@ -397,6 +433,73 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
         </div>
       </div>
 
+      {/* Pending SEC Approvals Section */}
+      {pendingSecUsers.length > 0 && (
+        <div className="bg-amber-50/90 border-2 border-amber-300 rounded-lg p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <h2 className="text-base font-bold text-amber-900">
+                Pending SEC Evaluator Registrations ({pendingSecUsers.length})
+              </h2>
+            </div>
+            <span className="text-xs text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full font-semibold">
+              Action Required
+            </span>
+          </div>
+          <p className="text-xs text-amber-800">
+            The following SEC committee evaluators have registered and require administrator approval before they can log in to the assessment portal.
+          </p>
+          <div className="overflow-x-auto bg-white rounded-md border border-amber-200">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-amber-100/60 text-gray-700 font-semibold border-b border-amber-200">
+                <tr>
+                  <th className="px-4 py-2.5">Name & Email</th>
+                  <th className="px-4 py-2.5">Designation & Department</th>
+                  <th className="px-4 py-2.5">Registered</th>
+                  <th className="px-4 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pendingSecUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-amber-50/50">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-gray-900">{u.name}</div>
+                      <div className="text-gray-500">{u.email}</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      <div>{u.designation || '—'}</div>
+                      <div className="text-gray-400">{u.department || '—'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                      {new Date(u.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleApproveSec(u.id)}
+                          disabled={loading}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded shadow-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="h-3.5 w-3.5" /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectSec(u.id)}
+                          disabled={loading}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded shadow-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" /> Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Action Bar & Controls */}
       <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -516,7 +619,15 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
 
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1 items-start">
-                        {user.active ? (
+                        {user.role === 'SEC_MEMBER' && user.approvalStatus === 'PENDING' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                            <Clock className="w-3 h-3 text-amber-600" /> Pending Approval
+                          </span>
+                        ) : user.role === 'SEC_MEMBER' && user.approvalStatus === 'REJECTED' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-300">
+                            <X className="w-3 h-3 text-red-600" /> Rejected
+                          </span>
+                        ) : user.active ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
                           </span>
@@ -535,10 +646,31 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
 
                     <td className="px-6 py-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
+                        {user.role === 'SEC_MEMBER' && user.approvalStatus === 'PENDING' && (
+                          <>
+                            <button
+                              onClick={() => handleApproveSec(user.id)}
+                              disabled={loading}
+                              title="Approve SEC Evaluator"
+                              className="px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded shadow-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <Check className="h-3.5 w-3.5" /> Approve
+                            </button>
+                            <button
+                              onClick={() => handleRejectSec(user.id)}
+                              disabled={loading}
+                              title="Reject SEC Evaluator"
+                              className="px-2.5 py-1 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded shadow-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <X className="h-3.5 w-3.5" /> Reject
+                            </button>
+                          </>
+                        )}
+
                         <button
                           onClick={() => handleOpenEdit(user)}
                           title="Edit user details"
-                          className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+                          className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded cursor-pointer"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
@@ -546,7 +678,7 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
                         <button
                           onClick={() => handleOpenResetPassword(user)}
                           title="Reset password"
-                          className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                          className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded cursor-pointer"
                         >
                           <KeyRound className="h-4 w-4" />
                         </button>
@@ -554,7 +686,7 @@ export default function UsersManagementClient({ initialUsers }: UsersManagementC
                         <button
                           onClick={() => handleOpenToggleActive(user)}
                           title={user.active ? 'Deactivate user' : 'Reactivate user'}
-                          className={`p-1.5 rounded ${
+                          className={`p-1.5 rounded cursor-pointer ${
                             user.active
                               ? 'text-rose-600 hover:text-rose-900 hover:bg-rose-50'
                               : 'text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50'

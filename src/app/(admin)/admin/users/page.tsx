@@ -24,7 +24,7 @@ export default async function AdminUsersPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Manage system users, designate active SEC evaluation committee members (maximum 3 active), edit profiles, deactivate accounts, and reset credentials.
+          Manage system users, approve or reject pending SEC evaluator registrations, edit profiles, deactivate accounts, and reset credentials.
         </p>
       </div>
 

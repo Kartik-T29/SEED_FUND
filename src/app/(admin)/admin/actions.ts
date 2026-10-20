@@ -12,6 +12,8 @@ import {
   adminWaiveGrantLimit,
   adminReopenFormB,
   adminCreateSecUser,
+  adminApproveSecUser,
+  adminRejectSecUser,
   adminUpdateUser,
   adminToggleUserActive,
   adminResetUserPassword,
@@ -162,6 +164,30 @@ export async function toggleUserActiveAction(
   if (!session || session.role !== 'ADMIN') throw new Error('Unauthorized');
 
   const user = await adminToggleUserActive(session, userId, active, reason);
+  revalidatePath('/admin/users');
+  return { success: true, user };
+}
+
+export async function approveSecUserAction(
+  userId: string,
+  reason: string = "Approved by admin"
+) {
+  const session = await getSession();
+  if (!session || session.role !== 'ADMIN') throw new Error('Unauthorized');
+
+  const user = await adminApproveSecUser(session, userId, reason);
+  revalidatePath('/admin/users');
+  return { success: true, user };
+}
+
+export async function rejectSecUserAction(
+  userId: string,
+  reason: string = "Rejected by admin"
+) {
+  const session = await getSession();
+  if (!session || session.role !== 'ADMIN') throw new Error('Unauthorized');
+
+  const user = await adminRejectSecUser(session, userId, reason);
   revalidatePath('/admin/users');
   return { success: true, user };
 }

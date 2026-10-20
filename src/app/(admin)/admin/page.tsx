@@ -14,7 +14,7 @@ export default async function AdminDashboard() {
     listApplicationsByTier({ userId: session.userId, role: session.role }),
     tierCounts({ userId: session.userId, role: session.role }),
     prisma.user.findMany({
-      where: { role: 'SEC_MEMBER', active: true },
+      where: { role: 'SEC_MEMBER', active: true, approvalStatus: 'APPROVED' },
       select: { id: true, name: true, designation: true },
       orderBy: { name: 'asc' },
     }),
