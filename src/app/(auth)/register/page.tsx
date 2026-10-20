@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
 import { register } from '@/lib/auth-actions';
@@ -90,20 +91,20 @@ export default function RegisterPage() {
                 required
                 error={fieldErrors.program?.[0]}
               />
-              <Input 
+              <PasswordInput 
                 label="Password" 
                 id="password" 
                 name="password" 
-                type="password" 
+                autoComplete="new-password"
                 required 
                 helpText="Min 8 chars, 1 uppercase, 1 number, 1 special char" 
                 error={fieldErrors.password?.[0]}
               />
-              <Input
+              <PasswordInput
                 label="Confirm Password"
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
+                autoComplete="new-password"
                 required
                 error={fieldErrors.confirmPassword?.[0]}
               />

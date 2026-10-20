@@ -46,6 +46,40 @@ export const registerSchema = z.object({
   path: ['confirmPassword'],
 });
 
+export const secRegisterSchema = z.object({
+  name: z.preprocess(
+    (val) => (typeof val === 'string' ? val.trim() : val),
+    z.string().min(2, 'Name must be at least 2 characters').max(100)
+  ),
+  email: z.preprocess(
+    (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
+    z.string().max(100).email('Invalid email address')
+  ),
+  designation: z.preprocess(
+    (val) => (typeof val === 'string' ? val.trim() : val),
+    z.string().max(100).optional()
+  ),
+  department: z.preprocess(
+    (val) => (typeof val === 'string' ? val.trim() : val),
+    z.string().max(100).optional()
+  ),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128)
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character (e.g. !@#$%^&*)'),
+  confirmPassword: z.string().min(1, 'Please confirm your password').max(128),
+  inviteCode: z.preprocess(
+    (val) => (typeof val === 'string' ? val.trim() : val),
+    z.string().max(100).optional()
+  ),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required').max(128),
   newPassword: z

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
 import { login } from '@/lib/auth-actions';
@@ -46,11 +47,10 @@ export default function LoginPage() {
                 autoComplete="email"
                 required
               />
-              <Input
+              <PasswordInput
                 label="Password"
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
               />
@@ -61,11 +61,17 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="justify-center border-t border-gray-100 pt-6">
+        <CardFooter className="flex-col gap-2 justify-center border-t border-gray-100 pt-6 text-center">
           <p className="text-sm text-gray-600">
             Don't have an account?{' '}
             <Link href="/register" className="font-medium text-brand-primary hover:text-brand-primary-dark">
               Register as a Startup
+            </Link>
+          </p>
+          <p className="text-xs text-gray-500">
+            Committee evaluator?{' '}
+            <Link href="/sec/register" className="font-medium text-brand-primary hover:text-brand-primary-dark">
+              Register as SEC Member
             </Link>
           </p>
         </CardFooter>

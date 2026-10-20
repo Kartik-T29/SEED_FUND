@@ -17,7 +17,7 @@ function getCookieName(): string {
 }
 
 // Routes that don't require authentication
-const publicRoutes = ['/', '/login', '/register'];
+const publicRoutes = ['/', '/login', '/register', '/sec/register'];
 
 const roleRoutes: Record<string, string[]> = {
   STARTUP: ['/dashboard', '/apply', '/status'],
@@ -48,6 +48,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
     pathname === '/api/health' ||
+    pathname === '/health' ||
     pathname === '/favicon.ico' ||
     pathname.startsWith('/logo')
   ) {

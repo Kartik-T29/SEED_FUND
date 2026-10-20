@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
 import { changePassword } from './actions';
@@ -40,26 +40,26 @@ export default function ChangePasswordPage() {
             {error && <Alert variant="error">{error}</Alert>}
             
             <div className="space-y-4">
-              <Input
+              <PasswordInput
                 label="Current Password"
                 id="currentPassword"
                 name="currentPassword"
-                type="password"
+                autoComplete="current-password"
                 required
               />
-              <Input
+              <PasswordInput
                 label="New Password"
                 id="newPassword"
                 name="newPassword"
-                type="password"
+                autoComplete="new-password"
                 required
                 helpText="Min 8 chars, 1 uppercase, 1 number, 1 special char"
               />
-              <Input
+              <PasswordInput
                 label="Confirm New Password"
                 id="confirmNewPassword"
                 name="confirmNewPassword"
-                type="password"
+                autoComplete="new-password"
                 required
               />
             </div>
