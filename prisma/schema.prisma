@@ -13,6 +13,12 @@ enum Role {
   ADMIN
 }
 
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // SUPERSEDED = an older version replaced after a re-presentation request
 enum AppStatus {
   DRAFT
@@ -55,16 +61,17 @@ enum DocType {
 }
 
 model User {
-  id                 String   @id @default(cuid())
-  email              String   @unique
+  id                 String         @id @default(cuid())
+  email              String         @unique
   name               String
   passwordHash       String
   role               Role
-  mustChangePassword Boolean  @default(false)
-  active             Boolean  @default(true)
+  approvalStatus     ApprovalStatus @default(APPROVED)
+  mustChangePassword Boolean        @default(false)
+  active             Boolean        @default(true)
   designation        String?
   department         String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime       @default(now())
 
   startup     Startup?
   assessments Assessment[]
@@ -162,6 +169,7 @@ model MilestoneAssessment {
   owner         User        @relation(fields: [ownerId], references: [id])
   track         String
   status        FormStatus  @default(DRAFT)
+  updatedAt     DateTime    @default(now()) @updatedAt
   items         MilestoneItem[]
   editLog       MilestoneEditLog[]
 }
@@ -173,16 +181,18 @@ model MilestoneItem {
   name        String
   state       MilestoneState      @default(PENDING)
   ownerRemark String?
+  updatedAt   DateTime            @default(now()) @updatedAt
   remarks     MilestoneRemark[]
 }
 
 model MilestoneRemark {
-  id       String        @id @default(cuid())
-  itemId   String
-  item     MilestoneItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  memberId String
-  member   User          @relation(fields: [memberId], references: [id])
-  remark   String
+  id        String        @id @default(cuid())
+  itemId    String
+  item      MilestoneItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    User          @relation(fields: [memberId], references: [id])
+  remark    String
+  updatedAt DateTime      @default(now()) @updatedAt
   @@unique([itemId, memberId])
 }
 
