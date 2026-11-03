@@ -186,10 +186,44 @@ async function runBenchmark() {
 
   const avgListTime = (totalListTime / iters).toFixed(2);
   const listRows = await prisma.application.count({ where: { status: { in: reviewable as any } } });
-  console.log(`[Query 1] listApplications (Full row with formData):`);
+  console.log(`[Before] listApplications (Full row with formData):`);
   console.log(`  - Rows retrieved: ${listRows}`);
   console.log(`  - Average latency: ${avgListTime} ms`);
   console.log(`  - Payload size (JSON serialized): ${(listPayloadBytes / 1024).toFixed(1)} KB`);
+
+  // 1b. Optimized listApplications (omitting formData) vs Raw
+  let totalOptimizedListTime = 0;
+  let optimizedListPayloadBytes = 0;
+
+  for (let i = 0; i < iters; i++) {
+    const t0 = performance.now();
+    const list = await prisma.application.findMany({
+      where: { status: { in: reviewable as any } },
+      orderBy: { submittedAt: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        status: true,
+        grantType: true,
+        requestedTotal: true,
+        submittedAt: true,
+        createdAt: true,
+        startup: { select: { teamName: true } },
+        _count: { select: { assessments: { where: { status: 'SUBMITTED' } } } },
+      },
+    });
+    const t1 = performance.now();
+    totalOptimizedListTime += (t1 - t0);
+    if (i === 0) {
+      optimizedListPayloadBytes = Buffer.byteLength(JSON.stringify(list));
+    }
+  }
+
+  const avgOptimizedListTime = (totalOptimizedListTime / iters).toFixed(2);
+  console.log(`\n[Optimized Query] listApplications (with field selection & composite index):`);
+  console.log(`  - Average latency: ${avgOptimizedListTime} ms`);
+  console.log(`  - Payload size (JSON serialized): ${(optimizedListPayloadBytes / 1024).toFixed(1)} KB`);
+  console.log(`  - Payload Reduction: -${(((listPayloadBytes - optimizedListPayloadBytes) / listPayloadBytes) * 100).toFixed(1)}%`);
 
   // 2. Application Detail Query (Current getApplication implementation)
   const sampleApp = await prisma.application.findFirst({ where: { status: 'SUBMITTED' } });
