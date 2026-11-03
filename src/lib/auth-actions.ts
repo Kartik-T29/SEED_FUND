@@ -2,9 +2,10 @@
 
 import { redirect } from 'next/navigation';
 import prisma from '@/lib/db';
-import { hashPassword, verifyPassword, createSession, setSessionCookie, clearSessionCookie } from '@/lib/auth';
+import { hashPassword, verifyPassword, createSession, setSessionCookie, clearSessionCookie, getSession } from '@/lib/auth';
 import { loginSchema, registerSchema } from '@/lib/validations';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { adminApproveSecUser, adminRejectSecUser } from '@/lib/access';
 
 export async function login(formData: FormData) {
   const data = Object.fromEntries(formData.entries());
@@ -28,6 +29,18 @@ export async function login(formData: FormData) {
 
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return { error: 'Invalid email or password', remainingAttempts };
+  }
+
+  if (user.role === 'SEC_MEMBER' && user.approvalStatus === 'PENDING') {
+    return { error: 'Your SEC Evaluator account is awaiting verification and approval by the administrator.' };
+  }
+
+  if (user.role === 'SEC_MEMBER' && user.approvalStatus === 'REJECTED') {
+    return { error: 'Your SEC Evaluator registration has been rejected. Please contact the administrator.' };
+  }
+
+  if (!user.active) {
+    return { error: 'Your account has been deactivated. Please contact the administrator.' };
   }
 
   const token = await createSession({
@@ -104,4 +117,66 @@ export async function register(formData: FormData) {
 export async function logout() {
   await clearSessionCookie();
   redirect('/login');
+}
+
+export async function registerSec(formData: FormData) {
+  const data = Object.fromEntries(formData.entries());
+  const name = String(data.name || '').trim();
+  const email = String(data.email || '').trim().toLowerCase();
+  const designation = String(data.designation || '').trim();
+  const department = String(data.department || '').trim();
+  const password = String(data.password || '');
+  const confirmPassword = String(data.confirmPassword || '');
+
+  if (!name || !email || !designation || !department || !password) {
+    return { error: 'All fields are required.' };
+  }
+
+  if (password.length < 8) {
+    return { error: 'Password must be at least 8 characters long.' };
+  }
+
+  if (password !== confirmPassword) {
+    return { error: 'Passwords do not match.' };
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    return { error: 'An account with this email address already exists.' };
+  }
+
+  const passwordHash = await hashPassword(password);
+  await prisma.user.create({
+    data: {
+      name,
+      email,
+      role: 'SEC_MEMBER',
+      approvalStatus: 'PENDING',
+      active: true,
+      designation,
+      department,
+      passwordHash,
+      mustChangePassword: false,
+    },
+  });
+
+  return { success: true };
+}
+
+export async function approveSecAction(userId: string) {
+  const session = await getSession();
+  if (!session || session.role !== 'ADMIN') {
+    return { error: 'Unauthorized' };
+  }
+  await adminApproveSecUser(session as any, userId);
+  return { success: true };
+}
+
+export async function rejectSecAction(userId: string) {
+  const session = await getSession();
+  if (!session || session.role !== 'ADMIN') {
+    return { error: 'Unauthorized' };
+  }
+  await adminRejectSecUser(session as any, userId);
+  return { success: true };
 }

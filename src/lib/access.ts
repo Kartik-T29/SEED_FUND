@@ -663,11 +663,48 @@ export async function adminComparison(s: Session, applicationId: string) {
 // Form B gate: every SEC member submitted Forms 1+3 AND the milestone form is submitted.
 export async function formBReadiness(applicationId: string) {
   const [members, submitted, ms] = await Promise.all([
-    prisma.user.count({ where: { role: "SEC_MEMBER" } }),
+    prisma.user.count({ where: { role: "SEC_MEMBER", approvalStatus: "APPROVED", active: true } }),
     prisma.assessment.count({ where: { applicationId, status: "SUBMITTED" } }),
     prisma.milestoneAssessment.findUnique({ where: { applicationId }, select: { status: true } }),
   ]);
   return { ready: submitted === members && members > 0 && ms?.status === "SUBMITTED", submitted, members, milestoneSubmitted: ms?.status === "SUBMITTED" };
+}
+
+export async function listPendingSecMembers(s: Session) {
+  requireRole(s, "ADMIN");
+  return prisma.user.findMany({
+    where: { role: "SEC_MEMBER", approvalStatus: "PENDING" },
+    select: { id: true, name: true, email: true, designation: true, department: true, createdAt: true, active: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function adminApproveSecUser(s: Session, targetUserId: string, reason?: string) {
+  requireRole(s, "ADMIN");
+  const [updated] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: targetUserId },
+      data: { approvalStatus: "APPROVED", active: true },
+    }),
+    prisma.auditLog.create({
+      data: { actorId: s.userId, action: "APPROVE_SEC_MEMBER", entity: "User", entityId: targetUserId },
+    }),
+  ]);
+  return updated;
+}
+
+export async function adminRejectSecUser(s: Session, targetUserId: string, reason?: string) {
+  requireRole(s, "ADMIN");
+  const [updated] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: targetUserId },
+      data: { approvalStatus: "REJECTED", active: false },
+    }),
+    prisma.auditLog.create({
+      data: { actorId: s.userId, action: "REJECT_SEC_MEMBER", entity: "User", entityId: targetUserId },
+    }),
+  ]);
+  return updated;
 }
 
 export async function submitFormB(

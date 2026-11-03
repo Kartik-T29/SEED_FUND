@@ -61,11 +61,17 @@ export default function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="justify-center border-t border-gray-100 pt-6">
-          <p className="text-sm text-gray-600">
+        <CardFooter className="flex-col gap-2 border-t border-gray-100 pt-6 text-center text-sm text-gray-600">
+          <p>
             Don't have an account?{' '}
-            <Link href="/register" className="font-medium text-brand-primary hover:text-brand-primary-dark">
-              Register as a Startup
+            <Link href="/register" className="font-semibold text-brand-primary hover:text-brand-primary-dark">
+              Register as Startup
+            </Link>
+          </p>
+          <p className="text-xs text-gray-500">
+            SEC Committee Evaluator?{' '}
+            <Link href="/sec-register" className="font-semibold text-indigo-600 hover:text-indigo-800 underline">
+              Register for Evaluation Access
             </Link>
           </p>
         </CardFooter>

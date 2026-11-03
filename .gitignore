@@ -55,8 +55,12 @@ test-*.ts
 *.spec.*
 *.dump
 *.sql
+!prisma/sqlite_schema.sql
 *.sqlite
 *.sqlite3
+*.db
+*.db-journal
+dev.db
 
 # operating system & IDEs
 .DS_Store

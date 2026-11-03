@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -60,6 +60,10 @@ model User {
   name               String
   passwordHash       String
   role               Role
+  approvalStatus     String   @default("APPROVED")
+  active             Boolean  @default(true)
+  designation        String?
+  department         String?
   mustChangePassword Boolean  @default(false)
   createdAt          DateTime @default(now())
 
@@ -91,8 +95,8 @@ model Application {
   supersedesId   String?   @unique
   status         AppStatus @default(DRAFT)
   grantType      GrantType?
-  requestedTotal Decimal   @default(0) @db.Decimal(12, 2)
-  formData       Json      @default("{}")
+  requestedTotal Decimal   @default(0)
+  formData       Json      @default(dbgenerated("'{}'"))
   submittedAt    DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -125,9 +129,9 @@ model BudgetItem {
   header        String
   name          String
   vendor        String?
-  unitCost      Decimal     @db.Decimal(12, 2)
+  unitCost      Decimal
   qty           Int
-  total         Decimal     @db.Decimal(12, 2)
+  total         Decimal
   justification String?
   @@index([applicationId])
 }
@@ -138,8 +142,8 @@ model Assessment {
   application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   memberId       String
   member         User        @relation(fields: [memberId], references: [id])
-  statusForm     Json        @default("{}")
-  experimentForm Json        @default("{}")
+  statusForm     Json        @default(dbgenerated("'{}'"))
+  experimentForm Json        @default(dbgenerated("'{}'"))
   status         FormStatus  @default(DRAFT)
   submittedAt    DateTime?
   @@unique([applicationId, memberId])
@@ -195,7 +199,7 @@ model GrantEvaluation {
   adminId       String
   admin         User        @relation(fields: [adminId], references: [id])
   decision      String
-  approvedTotal Decimal     @db.Decimal(12, 2)
+  approvedTotal Decimal
   amounts       Json
   timeline      Json
   note          String?
@@ -207,7 +211,7 @@ model GrantHistory {
   startupId String
   startup   Startup   @relation(fields: [startupId], references: [id])
   grantType GrantType
-  amount    Decimal   @db.Decimal(12, 2)
+  amount    Decimal
   closedAt  DateTime?
   waived    Boolean   @default(false)
   @@index([startupId])
