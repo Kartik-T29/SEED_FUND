@@ -13,18 +13,23 @@ export default function SecRegisterPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setLoading(true);
     setError(null);
     try {
+      const formData = new FormData(e.currentTarget);
       const res = await registerSec(formData);
-      if (res.error) {
+      if (res?.error) {
         setError(res.error);
-      } else {
+      } else if (res?.success) {
         setSubmitted(true);
+      } else {
+        setError('Registration could not be completed. Please try again.');
       }
-    } catch {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (err: any) {
+      console.error('SEC registration submit error:', err);
+      setError(err?.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -54,7 +59,7 @@ export default function SecRegisterPage() {
               </div>
             </div>
           ) : (
-            <form action={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {error && <Alert variant="error">{error}</Alert>}
 
               <Input label="Full Name" id="name" name="name" required placeholder="Prof. Jane Doe" />
