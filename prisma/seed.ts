@@ -1,6 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../src/lib/prisma";
 import bcrypt from "bcryptjs";
-const prisma = new PrismaClient();
 
 const isProd = process.env.NODE_ENV === "production";
 // DEV/TEST ONLY defaults. In production every password must come from env and be changed on first login.
