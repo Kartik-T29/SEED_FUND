@@ -56,6 +56,7 @@ test-*.ts
 *.dump
 *.sql
 !prisma/sqlite_schema.sql
+!deploy/*.sql
 *.sqlite
 *.sqlite3
 *.db

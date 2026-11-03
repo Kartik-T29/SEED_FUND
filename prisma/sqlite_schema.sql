@@ -194,5 +194,12 @@ CREATE UNIQUE INDEX "GrantEvaluation_applicationId_key" ON "GrantEvaluation"("ap
 CREATE INDEX "GrantHistory_startupId_idx" ON "GrantHistory"("startupId");
 
 -- CreateIndex
-CREATE INDEX "AuditLog_entity_entityId_idx" ON "AuditLog"("entity", "entityId");
+CREATE INDEX "Application_status_submittedAt_idx" ON "Application"("status", "submittedAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "User_role_approvalStatus_idx" ON "User"("role", "approvalStatus");
+
+-- CreateIndex
+CREATE INDEX "Assessment_applicationId_status_idx" ON "Assessment"("applicationId", "status");
+
 

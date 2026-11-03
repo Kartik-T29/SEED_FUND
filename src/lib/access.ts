@@ -46,7 +46,14 @@ export const listApplications = (s: Session) =>
   prisma.application.findMany({
     where: applicationScope(s),
     orderBy: { submittedAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      version: true,
+      status: true,
+      grantType: true,
+      requestedTotal: true,
+      submittedAt: true,
+      createdAt: true,
       startup: { select: { teamName: true } },
       _count: { select: { assessments: { where: { status: "SUBMITTED" } } } },
     },

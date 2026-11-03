@@ -72,6 +72,8 @@ model User {
   milestones  MilestoneAssessment[]
   remarks     MilestoneRemark[]
   evaluations GrantEvaluation[]
+
+  @@index([role, approvalStatus])
 }
 
 // OWNERSHIP ROOT: user -> startup -> applications -> everything else
@@ -109,6 +111,7 @@ model Application {
 
   @@index([startupId])
   @@index([status])
+  @@index([status, submittedAt])
 }
 
 model Document {
@@ -147,6 +150,7 @@ model Assessment {
   status         FormStatus  @default(DRAFT)
   submittedAt    DateTime?
   @@unique([applicationId, memberId])
+  @@index([applicationId, status])
 }
 
 model MilestoneAssessment {
