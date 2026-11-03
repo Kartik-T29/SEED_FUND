@@ -6,7 +6,7 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'ideapad_session';
 
 // Routes that don't require authentication
-const publicRoutes = ['/', '/login', '/register'];
+const publicRoutes = ['/', '/login', '/register', '/sec-register'];
 
 const roleRoutes: Record<string, string[]> = {
   STARTUP: ['/dashboard', '/apply', '/status'],
