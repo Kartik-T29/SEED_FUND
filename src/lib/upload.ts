@@ -9,9 +9,11 @@ export async function saveUploadedFile(
   applicationId: string,
   docType: string
 ): Promise<{ filePath: string; fileName: string; fileSize: number }> {
-  // Validate file size
-  if (file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File size exceeds ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB limit`);
+  // Validate file size: 7 MB for pitch deck, 500 KB for other documents
+  const maxLimit = docType === 'DECK' ? 7 * 1024 * 1024 : 500 * 1024;
+  if (file.size > maxLimit) {
+    const limitLabel = docType === 'DECK' ? '7 MB' : '500 KB';
+    throw new Error(`File size exceeds ${limitLabel} limit`);
   }
 
   // Validate file type

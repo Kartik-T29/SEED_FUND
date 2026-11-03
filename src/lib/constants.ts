@@ -163,7 +163,9 @@ export const APPLICATION_SECTIONS = [
 export const MAX_GRANTS_PER_TEAM = 3;
 
 // ─── File upload constraints ────────────────────────────────────────
-export const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_DOCUMENT_SIZE_BYTES = 500 * 1024; // 500 KB
+export const MAX_DECK_SIZE_BYTES = 7 * 1024 * 1024; // 7 MB
+export const MAX_FILE_SIZE_BYTES = MAX_DECK_SIZE_BYTES;
 export const ALLOWED_FILE_TYPES = {
   document: ['application/pdf'],
   image: ['image/jpeg', 'image/jpg', 'image/png'],

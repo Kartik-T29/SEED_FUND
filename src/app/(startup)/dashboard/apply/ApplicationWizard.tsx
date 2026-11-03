@@ -284,17 +284,85 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
     setBudgetItems(budgetItems.filter((_, i) => i !== index));
   };
 
+  // Client-side image compression to ensure uploads remain under 500 KB
+  const compressImage = async (file: File, maxSizeBytes: number): Promise<File> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1600;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(file);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let quality = 0.85;
+          const tryCompress = (q: number) => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) return resolve(file);
+                if (blob.size <= maxSizeBytes || q <= 0.3) {
+                  const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                    type: 'image/jpeg',
+                    lastModified: Date.now(),
+                  });
+                  resolve(compressedFile);
+                } else {
+                  tryCompress(q - 0.15);
+                }
+              },
+              'image/jpeg',
+              q
+            );
+          };
+          tryCompress(quality);
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   // File upload handler
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     docType: string,
     memberLabel?: string
   ) => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be under 5 MB');
+    const maxLimit = docType === 'DECK' ? 7 * 1024 * 1024 : 500 * 1024;
+    const limitLabel = docType === 'DECK' ? '7 MB' : '500 KB';
+
+    // Client-side image compression for photos / scanned documents > 500 KB
+    if (file.type.startsWith('image/') && file.size > 500 * 1024) {
+      try {
+        file = await compressImage(file, 500 * 1024);
+      } catch (err) {
+        console.warn('Image compression fallback:', err);
+      }
+    }
+
+    if (file.size > maxLimit) {
+      alert(`File size exceeds the ${limitLabel} limit. Please select a file under ${limitLabel}.`);
+      e.target.value = '';
       return;
     }
 
@@ -1563,7 +1631,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                   Optional Annexure Upload (Screenshots & Supporting Evidence)
                 </label>
                 <p className="text-xs text-gray-500">
-                  Upload screenshots of your prototype, CAD designs, software UI, or data charts (PDF/JPG/PNG, max 5 MB).
+                  Upload screenshots of your prototype, CAD designs, software UI, or data charts (PDF/JPG/PNG, max 500 KB).
                 </p>
 
                 <div className="flex flex-wrap gap-2 items-center pt-1">

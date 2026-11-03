@@ -9,15 +9,18 @@ interface FileUploadProps {
   accept?: string;
   error?: string;
   maxSizeMB?: number;
+  maxSizeKB?: number;
   onChange: (file: File | null) => void;
   currentFile?: string;
   required?: boolean;
 }
 
-function FileUpload({ label, accept = '.pdf,.jpg,.jpeg,.png', error, maxSizeMB = 5, onChange, currentFile, required }: FileUploadProps) {
+function FileUpload({ label, accept = '.pdf,.jpg,.jpeg,.png', error, maxSizeMB, maxSizeKB = 500, onChange, currentFile, required }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string>(currentFile || '');
   const [dragOver, setDragOver] = useState(false);
+  const maxBytes = maxSizeMB ? maxSizeMB * 1024 * 1024 : maxSizeKB * 1024;
+  const limitLabel = maxSizeMB ? `${maxSizeMB} MB` : `${maxSizeKB} KB`;
 
   const handleFile = (file: File | null) => {
     if (!file) {
@@ -25,8 +28,8 @@ function FileUpload({ label, accept = '.pdf,.jpg,.jpeg,.png', error, maxSizeMB =
       onChange(null);
       return;
     }
-    if (file.size > maxSizeMB * 1024 * 1024) {
-      alert(`File size must be under ${maxSizeMB} MB`);
+    if (file.size > maxBytes) {
+      alert(`File size must be under ${limitLabel}`);
       return;
     }
     setFileName(file.name);
@@ -89,7 +92,7 @@ function FileUpload({ label, accept = '.pdf,.jpg,.jpeg,.png', error, maxSizeMB =
           <div className="space-y-1">
             <Upload className="h-8 w-8 mx-auto text-gray-400" />
             <p className="text-sm text-gray-500">Click or drag file to upload</p>
-            <p className="text-xs text-gray-400">PDF, JPEG, PNG up to {maxSizeMB}MB</p>
+            <p className="text-xs text-gray-400">PDF, JPEG, PNG up to {limitLabel}</p>
           </div>
         )}
       </div>

@@ -318,10 +318,11 @@ export async function addDocument(
   });
   if (!app) throw new Forbidden("NOT_FOUND");
 
-  // Validate size: max 5 MB
-  const MAX_SIZE = 5 * 1024 * 1024;
-  if (file.size > MAX_SIZE || file.buffer.length > MAX_SIZE) {
-    throw new Error("FILE_TOO_LARGE");
+  // Validate size: 7 MB for pitch deck, 500 KB for other documents
+  const maxLimit = docType === "DECK" ? 7 * 1024 * 1024 : 500 * 1024;
+  if (file.size > maxLimit || file.buffer.length > maxLimit) {
+    const limitLabel = docType === "DECK" ? "7 MB" : "500 KB";
+    throw new Error(`FILE_TOO_LARGE: ${limitLabel} maximum`);
   }
 
   // Validate MIME and extension
