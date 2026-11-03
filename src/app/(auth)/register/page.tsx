@@ -10,18 +10,26 @@ import { register } from '@/lib/auth-actions';
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, string[]> | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setLoading(true);
     setError(null);
+    setDetails(null);
     try {
+      const formData = new FormData(e.currentTarget);
       const result = await register(formData);
       if (result?.error) {
         setError(result.error);
+        if (result?.details) {
+          setDetails(result.details as Record<string, string[]>);
+        }
       }
-    } catch (e) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (err: any) {
+      console.error('Registration submit error:', err);
+      setError(err?.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -34,16 +42,54 @@ export default function RegisterPage() {
           <CardTitle className="text-center text-2xl">Startup Registration</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && <Alert variant="error">{error}</Alert>}
             
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <Input label="Full Name" id="name" name="name" required />
-              <Input label="Team / Startup Name" id="teamName" name="teamName" required />
-              <Input label="Email address" id="email" name="email" type="email" required />
-              <Input label="Phone Number" id="phone" name="phone" required placeholder="10-digit mobile number" />
-              <Input label="Enrollment Number" id="enrollmentNo" name="enrollmentNo" required />
-              <Input label="Program" id="program" name="program" required />
+              <Input 
+                label="Full Name" 
+                id="name" 
+                name="name" 
+                required 
+                error={details?.name?.[0]} 
+              />
+              <Input 
+                label="Team / Startup Name" 
+                id="teamName" 
+                name="teamName" 
+                required 
+                error={details?.teamName?.[0]} 
+              />
+              <Input 
+                label="Email address" 
+                id="email" 
+                name="email" 
+                type="email" 
+                required 
+                error={details?.email?.[0]} 
+              />
+              <Input 
+                label="Phone Number" 
+                id="phone" 
+                name="phone" 
+                required 
+                placeholder="10-digit mobile number" 
+                error={details?.phone?.[0]} 
+              />
+              <Input 
+                label="Enrollment Number" 
+                id="enrollmentNo" 
+                name="enrollmentNo" 
+                required 
+                error={details?.enrollmentNo?.[0]} 
+              />
+              <Input 
+                label="Program" 
+                id="program" 
+                name="program" 
+                required 
+                error={details?.program?.[0]} 
+              />
               <Input 
                 label="Password" 
                 id="password" 
@@ -51,8 +97,16 @@ export default function RegisterPage() {
                 type="password" 
                 required 
                 helpText="Min 8 chars, 1 uppercase, 1 number, 1 special char" 
+                error={details?.password?.[0]} 
               />
-              <Input label="Confirm Password" id="confirmPassword" name="confirmPassword" type="password" required />
+              <Input 
+                label="Confirm Password" 
+                id="confirmPassword" 
+                name="confirmPassword" 
+                type="password" 
+                required 
+                error={details?.confirmPassword?.[0]} 
+              />
             </div>
 
             <Button type="submit" className="w-full" loading={loading}>

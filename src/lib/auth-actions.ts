@@ -65,52 +65,71 @@ export async function login(formData: FormData) {
 export async function register(formData: FormData) {
   const data = Object.fromEntries(formData.entries());
   
+  // Normalize phone number (strip +91, leading 0, spaces, dashes)
+  if (typeof data.phone === 'string') {
+    let rawPhone = data.phone.trim().replace(/[\s\-\(\)\+]/g, '');
+    if (rawPhone.startsWith('91') && rawPhone.length === 12) {
+      rawPhone = rawPhone.slice(2);
+    } else if (rawPhone.startsWith('0') && rawPhone.length === 11) {
+      rawPhone = rawPhone.slice(1);
+    }
+    data.phone = rawPhone;
+  }
+
   const result = registerSchema.safeParse(data);
   if (!result.success) {
+    const firstIssue = result.error.issues[0];
+    const fieldName = firstIssue?.path?.join('.') || 'field';
+    const errorMessage = firstIssue?.message || 'Invalid form data';
     return { 
-      error: 'Invalid form data', 
+      error: `${errorMessage} (${fieldName})`, 
       details: result.error.flatten().fieldErrors 
     };
   }
 
   const { email, password, name, enrollmentNo, program, phone, teamName } = result.data;
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
-  if (existingUser) {
-    return { error: 'User with this email already exists' };
+    if (existingUser) {
+      return { error: 'An account with this email address already exists' };
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        passwordHash,
+        role: 'STARTUP',
+        mustChangePassword: false,
+        startup: {
+          create: {
+            teamName,
+            enrollmentNo,
+            program,
+            phone,
+          }
+        }
+      },
+    });
+
+    const token = await createSession({
+      userId: user.id,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    });
+    
+    await setSessionCookie(token);
+  } catch (error: any) {
+    console.error('Startup registration error:', error);
+    return { error: error?.message || 'Database error during registration. Please verify connection.' };
   }
 
-  const passwordHash = await hashPassword(password);
-
-  const user = await prisma.user.create({
-    data: {
-      email,
-      name,
-      passwordHash,
-      role: 'STARTUP',
-      mustChangePassword: false,
-      startup: {
-        create: {
-          teamName,
-          enrollmentNo,
-          program,
-          phone,
-        }
-      }
-    },
-  });
-
-  const token = await createSession({
-    userId: user.id,
-    role: user.role,
-    mustChangePassword: user.mustChangePassword,
-  });
-  
-  await setSessionCookie(token);
-  
   redirect('/dashboard');
 }
 
