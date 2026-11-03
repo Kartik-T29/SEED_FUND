@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from '@/components/ui/card';
@@ -30,9 +31,9 @@ export default function ChangePasswordPage() {
     <div className="min-h-[calc(100vh-130px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-center text-2xl">Change Password Required</CardTitle>
+          <CardTitle className="text-center text-2xl">Update Password</CardTitle>
           <CardDescription className="text-center">
-            For security reasons, you must change your password before continuing.
+            Enter your current password and choose a secure new password.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -69,6 +70,11 @@ export default function ChangePasswordPage() {
             </Button>
           </form>
         </CardContent>
+        <CardFooter className="justify-center border-t border-gray-100 pt-4">
+          <Link href="/admin" className="text-xs text-gray-500 hover:text-gray-800">
+            ← Cancel & Return to Dashboard
+          </Link>
+        </CardFooter>
       </Card>
     </div>
   );

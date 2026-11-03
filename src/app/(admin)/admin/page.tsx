@@ -2,6 +2,7 @@ import { getSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { listApplications, listPendingSecMembers } from '@/lib/access';
 import Link from 'next/link';
+import { KeyRound } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,9 +27,14 @@ export default async function AdminDashboard() {
             IDEAPAD Seed Fund Governance, SEC Evaluator Verification & Sanction Orders
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Badge variant="default">Admin Role</Badge>
-          <span className="text-xs text-gray-500 font-mono">ID: {session.userId}</span>
+          <Link href="/change-password">
+            <Button variant="outline" className="text-xs px-3 py-1.5 flex items-center gap-1.5 border-gray-300 hover:bg-gray-100">
+              <KeyRound className="w-3.5 h-3.5 text-gray-600" />
+              Change Password
+            </Button>
+          </Link>
         </div>
       </div>
 

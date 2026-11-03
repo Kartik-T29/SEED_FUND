@@ -11,7 +11,7 @@ const pw = (key: string, fallback: string) => {
 
 const users = [
   {
-    email: "admin@test.com",
+    email: "aschandel.soet@itmuniversity.ac.in",
     name: "IDEAPAD Admin",
     role: "ADMIN" as const,
     password: pw("SEED_ADMIN_PW", "Admin@123"),
