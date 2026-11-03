@@ -337,22 +337,32 @@ export async function addDocument(
     throw new Error("INVALID_FILE_EXTENSION");
   }
 
-  // Storage outside web root
-  const uploadDir = path.resolve(process.cwd(), "uploads", applicationId, docType);
-  await mkdir(uploadDir, { recursive: true });
+  // Store file directly in database as base64 data URI (compatible with Vercel serverless read-only filesystem)
+  const safeName = encodeURIComponent(file.name.replace(/[^a-zA-Z0-9._-]/g, "_"));
+  const dataUri = `data:${file.type};name=${safeName};base64,${file.buffer.toString("base64")}`;
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const uniqueName = `${Date.now()}-${randomUUID().slice(0, 8)}-${safeName}`;
-  const filePath = path.join(uploadDir, uniqueName);
+  // If a document of the same type (and memberLabel) already exists for this draft, replace it
+  const existingDoc = await prisma.document.findFirst({
+    where: {
+      applicationId,
+      type: docType,
+      memberLabel: memberLabel || null,
+    },
+  });
 
-  await writeFile(filePath, file.buffer);
+  if (existingDoc) {
+    return prisma.document.update({
+      where: { id: existingDoc.id },
+      data: { path: dataUri },
+    });
+  }
 
   return prisma.document.create({
     data: {
       applicationId,
       type: docType,
       memberLabel: memberLabel || null,
-      path: filePath,
+      path: dataUri,
     },
   });
 }
@@ -368,13 +378,18 @@ export async function removeDocument(s: Session, documentId: string) {
     throw new Forbidden("NOT_ALLOWED");
   }
 
-  try {
-    await unlink(doc.path);
-  } catch {
-    // Ignore if already removed from disk
+  await prisma.document.delete({ where: { id: documentId } });
+
+  // Clean up legacy local file on disk if path was a file path
+  if (!doc.path.startsWith("data:")) {
+    try {
+      await unlink(doc.path);
+    } catch {
+      // Ignore if already removed from disk
+    }
   }
 
-  return prisma.document.delete({ where: { id: documentId } });
+  return { success: true };
 }
 
 export async function submitApplication(s: Session, applicationId: string) {

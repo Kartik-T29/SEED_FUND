@@ -51,7 +51,6 @@ export async function saveDraftAction(
   if (!session || session.role !== 'STARTUP') throw new Error('Unauthorized');
 
   await accessSaveDraft(session, applicationId, payload);
-  revalidatePath('/dashboard/apply');
   return { success: true };
 }
 
@@ -64,58 +63,69 @@ export async function saveBudgetAction(
   if (!session || session.role !== 'STARTUP') throw new Error('Unauthorized');
 
   const result = await accessSaveBudget(session, applicationId, items, { allowPartial });
-  revalidatePath('/dashboard/apply');
   return { success: true, requestedTotal: result.requestedTotal, items: result.items };
 }
 
 export async function uploadDocumentAction(formData: FormData) {
-  const session = await getSession();
-  if (!session || session.role !== 'STARTUP') throw new Error('Unauthorized');
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'STARTUP') {
+      return { success: false, error: 'Unauthorized' };
+    }
 
-  const applicationId = formData.get('applicationId') as string;
-  const docType = formData.get('docType') as DocType;
-  const memberLabel = (formData.get('memberLabel') as string) || undefined;
-  const file = formData.get('file') as File;
+    const applicationId = formData.get('applicationId') as string;
+    const docType = formData.get('docType') as DocType;
+    const memberLabel = (formData.get('memberLabel') as string) || undefined;
+    const file = formData.get('file') as File;
 
-  if (!file || !applicationId || !docType) {
-    throw new Error('MISSING_FILE_OR_METADATA');
+    if (!file || !applicationId || !docType) {
+      return { success: false, error: 'Missing file or required metadata' };
+    }
+
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    const doc = await accessAddDocument(
+      session,
+      applicationId,
+      {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        buffer,
+      },
+      docType,
+      memberLabel
+    );
+
+    return {
+      success: true,
+      document: {
+        id: doc.id,
+        type: doc.type,
+        memberLabel: doc.memberLabel,
+        createdAt: doc.createdAt,
+      },
+    };
+  } catch (err: any) {
+    console.error('uploadDocumentAction error:', err);
+    return { success: false, error: err.message || 'File upload failed' };
   }
-
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-
-  const doc = await accessAddDocument(
-    session,
-    applicationId,
-    {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      buffer,
-    },
-    docType,
-    memberLabel
-  );
-
-  revalidatePath('/dashboard/apply');
-  return {
-    success: true,
-    document: {
-      id: doc.id,
-      type: doc.type,
-      memberLabel: doc.memberLabel,
-      createdAt: doc.createdAt,
-    },
-  };
 }
 
 export async function removeDocumentAction(documentId: string) {
-  const session = await getSession();
-  if (!session || session.role !== 'STARTUP') throw new Error('Unauthorized');
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'STARTUP') {
+      return { success: false, error: 'Unauthorized' };
+    }
 
-  await accessRemoveDocument(session, documentId);
-  revalidatePath('/dashboard/apply');
-  return { success: true };
+    await accessRemoveDocument(session, documentId);
+    return { success: true };
+  } catch (err: any) {
+    console.error('removeDocumentAction error:', err);
+    return { success: false, error: err.message || 'Failed to remove document' };
+  }
 }
 
 export async function submitApplicationAction(applicationId: string) {

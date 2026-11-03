@@ -199,8 +199,75 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
     return () => clearTimeout(timer);
   }, [budgetItems, isReadOnly, application.id]);
 
-  // Step change handler
+  // Compute maximum step the startup is permitted to access based on completion of previous steps
+  const maxUnlockedStep = useMemo(() => {
+    if (isReadOnly) return 8;
+
+    // Step 1: Must accept agreement
+    if (!isAgreementAccepted) return 1;
+
+    // Step 2: Problem statement, proposed solution, and traction required
+    if (
+      !(formData.problemStatement || '').trim() ||
+      !(formData.proposedSolution || '').trim() ||
+      !(formData.effortAndTraction || '').trim()
+    ) {
+      return 2;
+    }
+
+    // Step 3: Core experiment definitions required
+    const exp = formData.experiment || {};
+    if (
+      !(exp.objective || '').trim() ||
+      !(exp.methodology || '').trim() ||
+      !(exp.deliverables || '').trim()
+    ) {
+      return 3;
+    }
+
+    // Step 4: Budget items required and must be within range without contingency breach
+    if (budgetItems.length === 0 || isTotalOutOfRange || isContingencyBlocked) {
+      return 4;
+    }
+
+    // Step 5: Justification for every budget item
+    if (budgetItems.some((b: any) => !(b.justification || '').trim())) {
+      return 5;
+    }
+
+    // Step 6: TRL, MRL, and IRL self-assessments
+    const sa = formData.selfAssessment || {};
+    if (!sa.trl || !sa.mrl || !sa.irl) {
+      return 6;
+    }
+
+    // Step 7: Pitch deck is mandatory before proceeding to final review
+    if (!documents.some((d: any) => d.type === 'DECK')) {
+      return 7;
+    }
+
+    return 8;
+  }, [
+    isReadOnly,
+    isAgreementAccepted,
+    formData.problemStatement,
+    formData.proposedSolution,
+    formData.effortAndTraction,
+    formData.experiment,
+    budgetItems,
+    isTotalOutOfRange,
+    isContingencyBlocked,
+    formData.selfAssessment,
+    documents,
+  ]);
+
+  // Step change handler with step progression guard
   const goToStep = async (newStep: number) => {
+    if (newStep > maxUnlockedStep) {
+      alert(`Please complete the current step before advancing to Step ${newStep}.`);
+      return;
+    }
+
     if (!isReadOnly) {
       setSaving(true);
       setSaveStatus('saving');
@@ -377,11 +444,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       if (memberLabel) data.append('memberLabel', memberLabel);
 
       const res = await uploadDocumentAction(data);
-      if (res.success && res.document) {
+      if (res?.success && res?.document) {
         setDocuments((prev) => [
           ...prev.filter((d) => !(d.type === docType && d.memberLabel === (memberLabel || null))),
           res.document,
         ]);
+      } else {
+        alert(res?.error || 'File upload failed. Please try again.');
       }
     } catch (err: any) {
       alert(err.message || 'File upload failed');
@@ -394,8 +463,12 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
   const handleRemoveDocument = async (docId: string) => {
     if (!confirm('Are you sure you want to delete this document?')) return;
     try {
-      await removeDocumentAction(docId);
-      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      const res = await removeDocumentAction(docId);
+      if (res?.success) {
+        setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      } else {
+        alert(res?.error || 'Failed to remove document');
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to remove document');
     }
@@ -673,13 +746,24 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
             const stepNum = idx + 1;
             const isCompleted = stepNum < step;
             const isCurrent = stepNum === step;
+            const isAccessible = stepNum <= maxUnlockedStep;
             return (
               <div key={idx} className="flex-1 flex items-center last:flex-none">
                 <button
                   type="button"
-                  onClick={() => goToStep(stepNum)}
-                  className={`flex flex-col items-center group focus:outline-none ${
-                    isCurrent ? 'font-semibold text-brand-primary' : isCompleted ? 'text-gray-700' : 'text-gray-400'
+                  disabled={!isAccessible}
+                  onClick={() => isAccessible && goToStep(stepNum)}
+                  title={
+                    isAccessible
+                      ? `Go to Step ${stepNum}: ${s.label}`
+                      : `Complete previous steps to unlock Step ${stepNum}`
+                  }
+                  className={`flex flex-col items-center group focus:outline-none transition-opacity ${
+                    isCurrent
+                      ? 'font-semibold text-brand-primary'
+                      : isAccessible
+                      ? 'text-gray-700 hover:text-brand-primary cursor-pointer'
+                      : 'text-gray-300 cursor-not-allowed opacity-50'
                   }`}
                 >
                   <div
@@ -688,7 +772,9 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                         ? 'bg-brand-primary border-brand-primary text-white'
                         : isCurrent
                         ? 'bg-white border-brand-primary text-brand-primary ring-2 ring-brand-primary/20'
-                        : 'bg-white border-gray-300 text-gray-400'
+                        : isAccessible
+                        ? 'bg-white border-gray-400 text-gray-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-300'
                     }`}
                   >
                     {isCompleted ? <Check className="w-4 h-4" /> : stepNum}
@@ -700,7 +786,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 {idx < stepLabels.length - 1 && (
                   <div
                     className={`flex-1 h-0.5 mx-2 ${
-                      stepNum < step ? 'bg-brand-primary' : 'bg-gray-200'
+                      stepNum < step ? 'bg-brand-primary' : isAccessible ? 'bg-gray-300' : 'bg-gray-200'
                     }`}
                   />
                 )}
@@ -1074,7 +1160,15 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
             <Button type="button" variant="outline" onClick={() => goToStep(2)}>
               Back
             </Button>
-            <Button type="button" onClick={() => goToStep(4)}>
+            <Button
+              type="button"
+              onClick={() => goToStep(4)}
+              disabled={
+                !(formData.experiment?.objective || '').trim() ||
+                !(formData.experiment?.methodology || '').trim() ||
+                !(formData.experiment?.deliverables || '').trim()
+              }
+            >
               Next: Budget Details
             </Button>
           </CardFooter>
@@ -1683,7 +1777,15 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
               <Button type="button" variant="outline" onClick={() => goToStep(5)}>
                 Back
               </Button>
-              <Button type="button" onClick={() => goToStep(7)}>
+              <Button
+                type="button"
+                onClick={() => goToStep(7)}
+                disabled={
+                  !formData.selfAssessment?.trl ||
+                  !formData.selfAssessment?.mrl ||
+                  !formData.selfAssessment?.irl
+                }
+              >
                 Next: Documents & Team
               </Button>
             </CardFooter>
@@ -1953,9 +2055,20 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
             <Button type="button" variant="outline" onClick={() => goToStep(6)}>
               Back
             </Button>
-            <Button type="button" onClick={() => goToStep(8)}>
-              Next: Review & Submit
-            </Button>
+            <div className="flex flex-col items-end">
+              <Button
+                type="button"
+                onClick={() => goToStep(8)}
+                disabled={!documents.some((d: any) => d.type === 'DECK')}
+              >
+                Next: Review & Submit
+              </Button>
+              {!documents.some((d: any) => d.type === 'DECK') && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Upload pitch deck to unlock review
+                </p>
+              )}
+            </div>
           </CardFooter>
         </Card>
       )}
