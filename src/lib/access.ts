@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 import type { Role, AppStatus, Prisma, GrantType, DocType } from "@prisma/client";
 import { AGREEMENT_VERSION, getAgreementTextHash } from "./agreement";
 import { GRANT_RANGES } from "./seedfund-constants";
+import { buildApplicationData, canonicalizeApplicationData } from "./application-data";
 import { getStorageAdapter } from "./storage";
 import path from "path";
 import { mkdir, writeFile, unlink } from "fs/promises";
@@ -540,16 +541,149 @@ export async function submitApplication(s: Session, applicationId: string) {
   }
   formData.declaration.declaredAt = new Date().toISOString();
 
-  // Commit submission
-  await prisma.application.update({
-    where: { id: app.id },
-    data: {
-      status: "SUBMITTED",
-      submittedAt: new Date(),
-      requestedTotal: computedTotal,
-      formData,
+  const submittedAt = new Date();
+  const canonicalData = buildApplicationData({
+    ...app,
+    status: "SUBMITTED",
+    submittedAt,
+    requestedTotal: computedTotal,
+    formData,
+  });
+  const { fullHash } = canonicalizeApplicationData(canonicalData);
+
+  // Commit submission, snapshot, and audit in the same transaction
+  await prisma.$transaction([
+    prisma.application.update({
+      where: { id: app.id },
+      data: {
+        status: "SUBMITTED",
+        submittedAt,
+        requestedTotal: computedTotal,
+        formData,
+      },
+    }),
+    prisma.applicationSnapshot.upsert({
+      where: {
+        applicationId_version: {
+          applicationId: app.id,
+          version: app.version || 1,
+        },
+      },
+      create: {
+        applicationId: app.id,
+        version: app.version || 1,
+        data: canonicalData as any,
+        dataHash: fullHash,
+        reconstructed: false,
+      },
+      update: {
+        data: canonicalData as any,
+        dataHash: fullHash,
+        reconstructed: false,
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorId: s.userId,
+        action: "SUBMIT_APPLICATION",
+        entity: "Application",
+        entityId: app.id,
+      },
+    }),
+  ]);
+}
+
+export async function getStartupSubmissionForDownload(
+  s: Session,
+  options?: { version?: number; applicationId?: string }
+) {
+  requireRole(s, "STARTUP");
+  const startup = await prisma.startup.findUnique({
+    where: { userId: s.userId },
+  });
+  if (!startup) throw new Forbidden("NO_STARTUP");
+
+  // Derive application exclusively from startup ownership
+  let app = null;
+  if (options?.applicationId) {
+    app = await prisma.application.findFirst({
+      where: { id: options.applicationId, startupId: startup.id },
+      include: {
+        startup: { include: { user: true } },
+        budgetItems: true,
+        documents: true,
+      },
+    });
+  }
+
+  if (!app) {
+    // Latest submitted / reviewable application for this startup
+    app = await prisma.application.findFirst({
+      where: { startupId: startup.id, status: { not: "DRAFT" } },
+      orderBy: { submittedAt: "desc" },
+      include: {
+        startup: { include: { user: true } },
+        budgetItems: true,
+        documents: true,
+      },
+    });
+  }
+
+  if (!app) {
+    // If only draft exists, throw DRAFT_NOT_DOWNLOADABLE so route returns 403
+    const draft = await prisma.application.findFirst({
+      where: { startupId: startup.id, status: "DRAFT" },
+    });
+    if (draft) {
+      throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
+    }
+    throw new Forbidden("NOT_FOUND");
+  }
+
+  if (app.status === "DRAFT") {
+    throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
+  }
+
+  const requestedVersion = options?.version || app.version || 1;
+
+  // Get all snapshot versions for this application (for the versions list)
+  const allSnapshots = await prisma.applicationSnapshot.findMany({
+    where: { applicationId: app.id },
+    orderBy: { version: "desc" },
+    select: { version: true, dataHash: true, createdAt: true, reconstructed: true },
+  });
+
+  let snapshot = await prisma.applicationSnapshot.findUnique({
+    where: {
+      applicationId_version: {
+        applicationId: app.id,
+        version: requestedVersion,
+      },
     },
   });
+
+  // Backward compatibility: if no snapshot exists yet for this submitted application, reconstruct it
+  if (!snapshot) {
+    const canonicalData = buildApplicationData(app);
+    const { fullHash } = canonicalizeApplicationData(canonicalData);
+    snapshot = await prisma.applicationSnapshot.create({
+      data: {
+        applicationId: app.id,
+        version: requestedVersion,
+        data: canonicalData as any,
+        dataHash: fullHash,
+        reconstructed: true,
+      },
+    });
+  }
+
+  return {
+    application: app,
+    snapshot,
+    availableVersions: allSnapshots.length > 0
+      ? allSnapshots
+      : [{ version: snapshot.version, dataHash: snapshot.dataHash, createdAt: snapshot.createdAt, reconstructed: snapshot.reconstructed }],
+  };
 }
 
 // Re-presentation: old version -> SUPERSEDED, copy into a fresh DRAFT (version + 1)
