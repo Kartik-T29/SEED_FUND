@@ -137,5 +137,5 @@ export async function submitApplicationAction(applicationId: string) {
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/apply');
   revalidatePath('/status');
-  redirect('/dashboard');
+  return { success: true, redirectUrl: '/dashboard' };
 }

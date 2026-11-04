@@ -623,6 +623,25 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
 
   const canSubmit = checklist.every((c) => c.passed) && declarationChecked && typedDeclarationName.trim().toLowerCase() === registeredName.toLowerCase();
 
+  const handleSaveDraftManual = async () => {
+    if (isReadOnly) return;
+    setSaving(true);
+    setSaveStatus('saving');
+    try {
+      await saveDraftAction(application.id, {
+        formData,
+        grantType: (grantType as any) || '',
+        requestedTotal,
+      });
+      await saveBudgetAction(application.id, budgetItems, true);
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Final Submit Action
   const handleFinalSubmit = async () => {
     if (isReadOnly) return;
@@ -652,7 +671,11 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
         requestedTotal,
       });
       await saveBudgetAction(application.id, budgetItems, false);
-      await submitApplicationAction(application.id);
+      const res = await submitApplicationAction(application.id);
+      if (res?.redirectUrl) {
+        window.location.href = res.redirectUrl;
+        return;
+      }
     } catch (err: any) {
       let msg = err.message || 'Submission failed. Please check required fields.';
       if (msg === 'TEAM_MEMBERS_REQUIRED') {
@@ -808,6 +831,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       {step === 1 && (
         <Card>
           <CardHeader>
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">What the Startup must provide:</strong>
+                Review the official ITM University IDEAPAD Seed Fund policy agreement. By accepting these terms, you agree to comply with incubator milestones, intellectual property guidelines, and expenditure reporting standards.
+              </div>
+            </div>
             <CardTitle>{AGREEMENT_TITLE}</CardTitle>
             <CardDescription>{AGREEMENT_INTRO}</CardDescription>
           </CardHeader>
@@ -899,7 +929,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
             <div />
             {isAgreementAccepted ? (
               <Button type="button" onClick={() => goToStep(2)}>
-                Continue to Step 2
+                Save & Next: Basic Info
               </Button>
             ) : (
               <Button
@@ -908,7 +938,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 disabled={!agreementChecked || !typedAgreementName.trim() || saving || isReadOnly}
                 loading={saving}
               >
-                Accept & Proceed
+                Accept & Next
               </Button>
             )}
           </CardFooter>
@@ -921,6 +951,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       {step === 2 && (
         <Card>
           <CardHeader>
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">What the Startup must provide:</strong>
+                Select your target grant category based on your TRL/MRL stage and describe your startup's core problem (max 600 chars), proposed solution (max 600 chars), and historical traction (max 800 chars).
+              </div>
+            </div>
             <CardTitle>Basic Information & Concept</CardTitle>
             <CardDescription>
               Select your funding tier and define the problem statement and proposed solution.
@@ -1055,7 +1092,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 !formData.effortAndTraction
               }
             >
-              Next: Experiment Definition
+              Save & Next: Experiment Definition
             </Button>
           </CardFooter>
         </Card>
@@ -1067,6 +1104,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       {step === 3 && (
         <Card>
           <CardHeader>
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">What the Startup must provide:</strong>
+                Detail your experimental proof-of-concept plan across the 10 standardized criteria. Clearly define technical uncertainties, validation criteria, data to be recorded, and deliverables (max 800 characters per heading).
+              </div>
+            </div>
             <CardTitle>Experiment Definition</CardTitle>
             <CardDescription>
               Detail the 10 experimental sections that will validate your concept and progress to TRL-3.
@@ -1169,7 +1213,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 !(formData.experiment?.deliverables || '').trim()
               }
             >
-              Next: Budget Details
+              Save & Next: Budget Details
             </Button>
           </CardFooter>
         </Card>
@@ -1182,6 +1226,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
         <div className="space-y-6">
           <Card>
             <CardHeader>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+                <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-semibold">What the Startup must provide:</strong>
+                  Itemize your experiment requirements under the 9 official Annexure 1 headers. Include vendor names/sources, unit costs, and quantities. Equipment purchases require quotation attachments.
+                </div>
+              </div>
               <CardTitle>Itemized Budget Breakdown</CardTitle>
               <CardDescription>
                 Allocate expenses across the 9 budget categories. Note: Attach product details from the vendor website, brochure, or ecommerce platform.
@@ -1461,7 +1512,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 onClick={() => goToStep(5)}
                 disabled={isTotalOutOfRange || isContingencyBlocked || budgetItems.length === 0}
               >
-                Next: Justification
+                Save & Next: Justification
               </Button>
             </div>
           </div>
@@ -1474,6 +1525,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       {step === 5 && (
         <Card>
           <CardHeader>
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">What the Startup must provide:</strong>
+                Provide a specific explanation for each serial number item in your budget, describing why it is essential for your prototype or pilot stage (max 300 characters each).
+              </div>
+            </div>
             <CardTitle>Budget Justifications</CardTitle>
             <CardDescription>
               Explain why each item is essential for your prototype, pilot, or scale stage (max 300 characters each).
@@ -1539,7 +1597,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 budgetItems.some((b) => !(b.justification || '').trim())
               }
             >
-              Next: Self-Assessment
+              Save & Next: Self-Assessment
             </Button>
           </CardFooter>
         </Card>
@@ -1552,6 +1610,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
         <div className="space-y-6">
           <Card>
             <CardHeader>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+                <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-semibold">What the Startup must provide:</strong>
+                  Perform a self-assessment on the 9-level TRL, MRL, and IRL scales. Select your milestone track (Idea Prototyping vs Professional Practice) and indicate current achievements.
+                </div>
+              </div>
               <CardTitle>Technology & Market Readiness Levels</CardTitle>
               <CardDescription>
                 Self-evaluate your current Technology (TRL), Manufacturing (MRL), and Integration (IRL) levels (1–9).
@@ -1786,7 +1851,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                   !formData.selfAssessment?.irl
                 }
               >
-                Next: Documents & Team
+                Save & Next: Documents & Team
               </Button>
             </CardFooter>
           </Card>
@@ -1799,6 +1864,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       {step === 7 && (
         <Card>
           <CardHeader>
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5 mb-2">
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">What the Startup must provide:</strong>
+                Upload mandatory supporting documents: startup pitch deck (PDF, max 7MB), founder KYC (PAN, Aadhaar, photo), equipment vendor quotations, and prior grant utilization reports if applicable.
+              </div>
+            </div>
             <CardTitle>Documents & Team KYC</CardTitle>
             <CardDescription>
               Upload team identity verification documents, pitch deck, and prior grant utilization report (if applicable).
@@ -2061,7 +2133,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 onClick={() => goToStep(8)}
                 disabled={!documents.some((d: any) => d.type === 'DECK')}
               >
-                Next: Review & Submit
+                Save & Next: Review & Submit
               </Button>
               {!documents.some((d: any) => d.type === 'DECK') && (
                 <p className="text-xs text-amber-600 mt-1">
@@ -2078,6 +2150,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       ───────────────────────────────────────────────────────────── */}
       {step === 8 && (
         <div className="space-y-6">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <strong className="block font-semibold">What the Startup must provide:</strong>
+              Review your complete application summary, confirm all sections are complete, type your full name in the declaration, and submit to the Startup Evaluation Committee.
+            </div>
+          </div>
           {/* Read-Only Profile Details */}
           <Card>
             <CardHeader className="pb-3">
@@ -2312,17 +2391,29 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
               <Button type="button" variant="outline" onClick={() => goToStep(7)}>
                 Back
               </Button>
-              {!isReadOnly && (
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleFinalSubmit}
-                  disabled={!canSubmit || saving}
-                  loading={saving}
-                >
-                  Submit Application
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {!isReadOnly && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSaveDraftManual}
+                    disabled={saving}
+                  >
+                    Save Draft
+                  </Button>
+                )}
+                {!isReadOnly && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleFinalSubmit}
+                    disabled={!canSubmit || saving}
+                    loading={saving}
+                  >
+                    Submit Application
+                  </Button>
+                )}
+              </div>
             </CardFooter>
           </Card>
         </div>
