@@ -1,53 +1,49 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaLibSql } from '@prisma/adapter-libsql';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function cleanToken(token: string | undefined): string | undefined {
-  if (!token) return undefined;
-  // JWT tokens consist ONLY of ASCII base64url characters and dots: [A-Za-z0-9_-.]
-  // Strip any accidental box-drawing chars (e.g. │ U+2502 from terminal tables), newlines, spaces, quotes
-  const cleaned = token.replace(/[^A-Za-z0-9\-_.]/g, '').trim();
-  return cleaned.length > 0 ? cleaned : undefined;
-}
-
-function cleanUrl(url: string | undefined): string | undefined {
+function getDatabaseUrl(): string | undefined {
+  let url = process.env.DATABASE_URL;
   if (!url) return undefined;
-  // Strip out any terminal box-drawing chars, non-ASCII chars, newlines, quotes
-  let cleaned = url.replace(/[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=]/g, '').trim();
-  if (cleaned.startsWith('turso://')) {
-    cleaned = cleaned.replace(/^turso:\/\//, 'libsql://');
-  }
-  return cleaned.length > 0 ? cleaned : undefined;
-}
-
-function createPrismaClient(): PrismaClient {
-  let url = cleanUrl(process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL) || 'file:./dev.db';
-  let authToken = cleanToken(process.env.TURSO_AUTH_TOKEN || process.env.DATABASE_AUTH_TOKEN);
-
-  // Extract authToken from query parameter if embedded in connection string
-  try {
-    if (url.includes('authToken=')) {
-      const parsed = new URL(url.replace(/^libsql:/, 'https:'));
-      const qToken = parsed.searchParams.get('authToken');
-      if (qToken && !authToken) {
-        authToken = cleanToken(qToken);
-      }
+  // Clean potential terminal escape or box characters
+  url = url.replace(/[^A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=]/g, '').trim();
+  // Ensure connection limit parameter is set if not already present
+  if (url.startsWith('postgresql://') || url.startsWith('postgres://')) {
+    if (!url.includes('connection_limit=')) {
+      url += (url.includes('?') ? '&' : '?') + 'connection_limit=10&connect_timeout=10';
     }
-  } catch {
-    // Ignore URL parse error
   }
-
-  if (url.startsWith('libsql:') || url.startsWith('https:')) {
-    const adapter = new PrismaLibSql({ url, authToken });
-    return new PrismaClient({ adapter });
-  }
-
-  return new PrismaClient();
+  return url;
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+export function createPrismaClient(): PrismaClient {
+  const url = getDatabaseUrl();
+  return new PrismaClient({
+    datasources: url ? { db: { url } } : undefined,
+    log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+  });
+}
 
-globalForPrisma.prisma = prisma;
+export function getPrisma(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaClient();
+  }
+  return globalForPrisma.prisma;
+}
+
+// Proxy wrapper enables: import { prisma } from '@/lib/prisma';
+// But defers actual client instantiation until the first property is accessed at runtime!
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getPrisma() as any;
+    const value = client[prop];
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
+
+export default prisma;

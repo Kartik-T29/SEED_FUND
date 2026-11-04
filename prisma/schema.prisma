@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -84,6 +84,7 @@ model Startup {
   teamName     String
   enrollmentNo String
   program      String
+  department   String?
   phone        String
   applications Application[]
   grants       GrantHistory[]
@@ -111,7 +112,7 @@ model Application {
 
   @@index([startupId])
   @@index([status])
-  @@index([status, submittedAt])
+  @@index([status, submittedAt(sort: Desc)])
 }
 
 model Document {

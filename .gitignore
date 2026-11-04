@@ -49,14 +49,14 @@ tmp/
 debug/
 playground/
 test-flow.ts
-test-*.js
-test-*.ts
 *.test.*
 *.spec.*
 *.dump
 *.sql
+!prisma/migrations/**/*.sql
 !prisma/sqlite_schema.sql
 !deploy/*.sql
+!scripts/*.ts
 *.sqlite
 *.sqlite3
 *.db
