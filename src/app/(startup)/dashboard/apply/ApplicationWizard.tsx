@@ -599,16 +599,23 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
 
     // 4. Budget
     const hasBudgetRows = budgetItems.length > 0;
-    const hasQuotationsForEquipment = budgetItems
-      .filter((b) => b.header === 'equipment')
-      .every(() => documents.some((d) => d.type === 'QUOTATION'));
     const isContingencyOk = !isContingencyBlocked;
     const isRangeOk = !isTotalOutOfRange;
     items.push({
       label: 'Step 4: Itemized budget within selected grant range',
-      passed: hasBudgetRows && isRangeOk && isContingencyOk && hasQuotationsForEquipment,
+      passed: hasBudgetRows && isRangeOk && isContingencyOk,
       step: 4,
     });
+
+    const hasEquipmentItems = budgetItems.some((b) => b.header === 'equipment');
+    const hasQuotationsForEquipment = documents.some((d) => d.type === 'QUOTATION');
+    if (hasEquipmentItems) {
+      items.push({
+        label: 'Step 4: Equipment purchase vendor quotation uploaded (PDF/Image)',
+        passed: hasQuotationsForEquipment,
+        step: 4,
+      });
+    }
 
     // 5. Justifications
     const allJustified =
@@ -1537,6 +1544,13 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
               <p className="text-xs text-amber-700 font-medium flex items-center gap-1.5">
                 <Info className="w-4 h-4 flex-shrink-0" />
                 Contingency is {contingencyPercentage.toFixed(1)}% of total grant. Recommended to keep under 10%.
+              </p>
+            )}
+
+            {budgetItems.some((b) => b.header === 'equipment') && !documents.some((d) => d.type === 'QUOTATION') && (
+              <p className="text-xs text-amber-700 font-medium flex items-center gap-1.5">
+                <Info className="w-4 h-4 flex-shrink-0" />
+                Note: An equipment quotation document is required for final submission because your budget includes equipment items. You can upload it in the Equipment section above or under Step 7.
               </p>
             )}
 
