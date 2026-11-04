@@ -31,6 +31,23 @@ export function applicationScope(s: Session): Prisma.ApplicationWhereInput {
 }
 
 export async function getApplication(s: Session, id: string) {
+  if (s.role === "SEC_MEMBER") {
+    const secUser = await prisma.user.findUnique({
+      where: { id: s.userId },
+      select: { approvalStatus: true, active: true },
+    });
+    if (!secUser || secUser.approvalStatus !== "APPROVED" || !secUser.active) {
+      throw new Forbidden("NOT_APPROVED_SEC");
+    }
+
+    const panelMember = await prisma.applicationPanelMember.findUnique({
+      where: { applicationId_memberId: { applicationId: id, memberId: s.userId } },
+    });
+    if (!panelMember) {
+      throw new Forbidden("NOT_A_PANEL_MEMBER");
+    }
+  }
+
   const app = await prisma.application.findFirst({
     where: { id, ...applicationScope(s) },
     include: {
@@ -39,14 +56,28 @@ export async function getApplication(s: Session, id: string) {
       startup: { include: { user: true } },
       milestone: { include: { items: { include: { remarks: true } }, owner: { select: { id: true, name: true } } } },
       evaluation: true,
+      panelMembers: {
+        include: { member: { select: { id: true, name: true, designation: true, department: true } } },
+        orderBy: { position: "asc" },
+      },
     },
   });
   if (!app) throw new Forbidden("NOT_FOUND"); // 404 not 403: don't reveal that it exists
   return app;
 }
 
-export const listApplications = (s: Session) =>
-  prisma.application.findMany({
+export const listApplications = async (s: Session) => {
+  if (s.role === "SEC_MEMBER") {
+    const secUser = await prisma.user.findUnique({
+      where: { id: s.userId },
+      select: { approvalStatus: true, active: true },
+    });
+    if (!secUser || secUser.approvalStatus !== "APPROVED" || !secUser.active) {
+      return [];
+    }
+  }
+
+  return prisma.application.findMany({
     where: applicationScope(s),
     orderBy: { submittedAt: "desc" },
     select: {
@@ -58,9 +89,19 @@ export const listApplications = (s: Session) =>
       submittedAt: true,
       createdAt: true,
       startup: { select: { teamName: true } },
-      _count: { select: { assessments: { where: { status: "SUBMITTED" } } } },
+      panelMembers: {
+        select: { memberId: true, position: true },
+        orderBy: { position: "asc" },
+      },
+      _count: {
+        select: {
+          panelMembers: true,
+          assessments: { where: { status: "SUBMITTED" } },
+        },
+      },
     },
   });
+};
 
 // ---------- STARTUP RULES ----------
 export async function isStatusUnlocked(userId: string) {
@@ -780,6 +821,214 @@ export async function startupStatusView(s: Session, applicationId: string) {
 }
 
 // ---------- SEC MEMBER RULES (Forms 1 and 3: private per member) ----------
+
+/**
+ * Enforces the "First three SEC members to start" panel rule.
+ * Operates in one database transaction with strict unique constraints on
+ * (applicationId, position) and (applicationId, memberId).
+ */
+export async function startAssessment(s: Session, applicationId: string) {
+  requireRole(s, "SEC_MEMBER");
+
+  const secUser = await prisma.user.findUnique({
+    where: { id: s.userId },
+    select: { id: true, role: true, approvalStatus: true, active: true, name: true, designation: true, department: true },
+  });
+  if (!secUser || secUser.role !== "SEC_MEMBER" || secUser.approvalStatus !== "APPROVED" || !secUser.active) {
+    throw new Forbidden("NOT_APPROVED_SEC");
+  }
+
+  const app = await prisma.application.findUnique({
+    where: { id: applicationId },
+    select: { id: true, status: true },
+  });
+  if (!app) throw new Forbidden("NOT_FOUND");
+  if (!["SUBMITTED", "IN_REVIEW"].includes(app.status)) {
+    throw new Forbidden("REVIEW_CLOSED");
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Check if member is ALREADY on the panel
+      const existing = await tx.applicationPanelMember.findUnique({
+        where: {
+          applicationId_memberId: { applicationId, memberId: s.userId },
+        },
+      });
+      if (existing) {
+        return { position: existing.position, alreadyStarted: true };
+      }
+
+      // 2. Count existing panel members
+      const currentMembers = await tx.applicationPanelMember.findMany({
+        where: { applicationId },
+        orderBy: { position: "asc" },
+      });
+
+      if (currentMembers.length >= 3) {
+        throw new Error("The panel for this application is complete");
+      }
+
+      const nextPosition = currentMembers.length + 1;
+
+      // 3. Create panel slot assignment
+      const panelEntry = await tx.applicationPanelMember.create({
+        data: {
+          applicationId,
+          memberId: s.userId,
+          position: nextPosition,
+        },
+      });
+
+      // 4. Upsert draft assessment record
+      await tx.assessment.upsert({
+        where: {
+          applicationId_memberId: { applicationId, memberId: s.userId },
+        },
+        create: {
+          applicationId,
+          memberId: s.userId,
+          status: "DRAFT",
+        },
+        update: {},
+      });
+
+      // 5. Progress status to IN_REVIEW if SUBMITTED
+      if (app.status === "SUBMITTED") {
+        await tx.application.update({
+          where: { id: applicationId },
+          data: { status: "IN_REVIEW" },
+        });
+      }
+
+      // 6. Audit log entry
+      await tx.auditLog.create({
+        data: {
+          actorId: s.userId,
+          action: `START_ASSESSMENT_SLOT_${nextPosition}`,
+          entity: "Application",
+          entityId: applicationId,
+          details: JSON.stringify({
+            memberId: s.userId,
+            position: nextPosition,
+            memberName: secUser.name,
+          }),
+        },
+      });
+
+      return { position: panelEntry.position, alreadyStarted: false };
+    });
+
+    return result;
+  } catch (err: any) {
+    if (err.code === "P2002") {
+      // Unique constraint violated by concurrent race: panel was filled
+      throw new Error("The panel for this application is complete");
+    }
+    throw err;
+  }
+}
+
+/**
+ * Admin releases a panel slot with a mandatory written reason (audited).
+ */
+export async function adminReleasePanelSlot(
+  s: Session,
+  applicationId: string,
+  memberId: string,
+  reason: string
+) {
+  requireRole(s, "ADMIN");
+  if (!reason || reason.trim().length === 0) {
+    throw new Error("REASON_REQUIRED_TO_RELEASE_PANEL_SLOT");
+  }
+
+  const panelMember = await prisma.applicationPanelMember.findUnique({
+    where: {
+      applicationId_memberId: { applicationId, memberId },
+    },
+    include: { member: { select: { name: true } } },
+  });
+  if (!panelMember) throw new Forbidden("NOT_FOUND");
+
+  await prisma.$transaction([
+    prisma.applicationPanelMember.delete({
+      where: { id: panelMember.id },
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorId: s.userId,
+        action: "RELEASE_PANEL_SLOT",
+        entity: "Application",
+        entityId: applicationId,
+        details: JSON.stringify({
+          memberId,
+          memberName: panelMember.member.name,
+          position: panelMember.position,
+          reason: reason.trim(),
+        }),
+      },
+    }),
+  ]);
+
+  return { success: true };
+}
+
+/**
+ * Update SEC member profile (name, designation, department).
+ */
+export async function updateSecProfile(
+  s: Session,
+  data: { name: string; designation: string; department?: string }
+) {
+  requireRole(s, "SEC_MEMBER");
+  if (!data.name?.trim()) throw new Error("NAME_REQUIRED");
+  if (!data.designation?.trim()) throw new Error("DESIGNATION_REQUIRED");
+
+  return prisma.user.update({
+    where: { id: s.userId },
+    data: {
+      name: data.name.trim(),
+      designation: data.designation.trim(),
+      department: data.department ? data.department.trim() : null,
+    },
+  });
+}
+
+/**
+ * Admin updates SEC member profile.
+ */
+export async function adminUpdateSecProfile(
+  s: Session,
+  targetUserId: string,
+  data: { name: string; designation: string; department?: string }
+) {
+  requireRole(s, "ADMIN");
+  if (!data.name?.trim()) throw new Error("NAME_REQUIRED");
+  if (!data.designation?.trim()) throw new Error("DESIGNATION_REQUIRED");
+
+  const [updated] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        name: data.name.trim(),
+        designation: data.designation.trim(),
+        department: data.department ? data.department.trim() : null,
+      },
+    }),
+    prisma.auditLog.create({
+      data: {
+        actorId: s.userId,
+        action: "ADMIN_UPDATE_SEC_PROFILE",
+        entity: "User",
+        entityId: targetUserId,
+        details: JSON.stringify(data),
+      },
+    }),
+  ]);
+  return updated;
+}
+
 export async function getMyAssessment(s: Session, applicationId: string) {
   requireRole(s, "SEC_MEMBER");
   await getApplication(s, applicationId);
@@ -811,6 +1060,15 @@ export async function saveAssessment(
 export async function claimMilestone(s: Session, applicationId: string, track: string, names: string[]) {
   requireRole(s, "SEC_MEMBER");
   await getApplication(s, applicationId);
+
+  // Policy: SEC Member 1 (first to start) fills the shared milestone form
+  const panelMember = await prisma.applicationPanelMember.findUnique({
+    where: { applicationId_memberId: { applicationId, memberId: s.userId } },
+  });
+  if (!panelMember || panelMember.position !== 1) {
+    throw new Forbidden("MEMBER_1_ONLY_MILESTONE");
+  }
+
   try {
     return await prisma.milestoneAssessment.create({
       data: { applicationId, ownerId: s.userId, track, items: { create: names.map((name) => ({ name })) } },
@@ -854,23 +1112,61 @@ export async function submitMilestone(s: Session, applicationId: string) {
 }
 
 // ---------- ADMIN RULES ----------
-// Admin sees only SUBMITTED assessments, so a member's half-finished draft stays private.
+// Admin sees only SUBMITTED assessments, ordered by fixed panel position 1, 2, 3.
 export async function adminComparison(s: Session, applicationId: string) {
   requireRole(s, "ADMIN");
-  return prisma.assessment.findMany({
-    where: { applicationId, status: "SUBMITTED" },
-    include: { member: { select: { id: true, name: true } } },
-  });
+  const [panelMembers, assessments] = await Promise.all([
+    prisma.applicationPanelMember.findMany({
+      where: { applicationId },
+      orderBy: { position: "asc" },
+      include: { member: { select: { id: true, name: true, designation: true, department: true } } },
+    }),
+    prisma.assessment.findMany({
+      where: { applicationId, status: "SUBMITTED" },
+      include: { member: { select: { id: true, name: true, designation: true, department: true } } },
+    }),
+  ]);
+
+  return assessments
+    .map((a) => {
+      const p = panelMembers.find((pm) => pm.memberId === a.memberId);
+      return {
+        ...a,
+        panelPosition: p ? p.position : 99,
+      };
+    })
+    .sort((a, b) => (a.panelPosition || 99) - (b.panelPosition || 99));
 }
 
-// Form B gate: every SEC member submitted Forms 1+3 AND the milestone form is submitted.
+// Form B gate: exactly 3 panel members started, all 3 submitted Forms 1+3, AND milestone is submitted.
 export async function formBReadiness(applicationId: string) {
-  const [members, submitted, ms] = await Promise.all([
-    prisma.user.count({ where: { role: "SEC_MEMBER", approvalStatus: "APPROVED", active: true } }),
-    prisma.assessment.count({ where: { applicationId, status: "SUBMITTED" } }),
-    prisma.milestoneAssessment.findUnique({ where: { applicationId }, select: { status: true } }),
+  const [panelMembers, submittedAssessments, ms] = await Promise.all([
+    prisma.applicationPanelMember.findMany({
+      where: { applicationId },
+      select: { position: true, memberId: true },
+    }),
+    prisma.assessment.count({
+      where: { applicationId, status: "SUBMITTED" },
+    }),
+    prisma.milestoneAssessment.findUnique({
+      where: { applicationId },
+      select: { status: true },
+    }),
   ]);
-  return { ready: submitted === members && members > 0 && ms?.status === "SUBMITTED", submitted, members, milestoneSubmitted: ms?.status === "SUBMITTED" };
+
+  const panelCount = panelMembers.length;
+  const ready =
+    panelCount === 3 &&
+    submittedAssessments === 3 &&
+    ms?.status === "SUBMITTED";
+
+  return {
+    ready,
+    submitted: submittedAssessments,
+    members: 3,
+    milestoneSubmitted: ms?.status === "SUBMITTED",
+    panelCount,
+  };
 }
 
 export async function listPendingSecMembers(s: Session) {
@@ -935,4 +1231,29 @@ export async function canReadDocument(s: Session, documentId: string) {
   if (!doc) throw new Forbidden("NOT_FOUND");
   await getApplication(s, doc.applicationId);
   return doc; // stream via an authenticated route, never expose raw path directly
+}
+
+// ---------- FORM PRINTING & DOWNLOAD AUDIT LOGGING ----------
+export async function logFormPrintAudit(
+  s: Session,
+  form: "FORM_A" | "FORM_B" | "APPLICATION",
+  applicationId: string,
+  dataHash: string,
+  isDownload: boolean = false
+) {
+  const actionPrefix = isDownload ? "DOWNLOAD" : "PRINT_VIEW";
+  await prisma.auditLog.create({
+    data: {
+      actorId: s.userId,
+      action: `${actionPrefix}_${form}`,
+      entity: "Application",
+      entityId: applicationId,
+      details: JSON.stringify({
+        form,
+        dataHash,
+        isDownload,
+        timestampIST: new Date().toISOString(),
+      }),
+    },
+  });
 }
