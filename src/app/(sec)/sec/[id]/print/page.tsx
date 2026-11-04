@@ -11,6 +11,7 @@ import {
 } from '@/lib/seedfund-constants';
 import { formatISTDate, formatISTDateTime } from '@/lib/dates';
 import Link from 'next/link';
+import PrintButton from '@/components/ui/PrintButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,12 +63,7 @@ export default async function PrintableFormA({ params }: { params: { id: string 
           >
             ← Back to Evaluation Form
           </Link>
-          <button
-            onClick={() => window.print()}
-            className="px-4 py-1.5 text-xs font-bold text-white bg-brand-primary rounded shadow hover:bg-brand-primary-dark"
-          >
-            Print Form A PDF
-          </button>
+          <PrintButton label="Print Form A PDF" />
         </div>
       </div>
 

@@ -55,8 +55,8 @@ export default async function SECDashboard() {
                         <span className="text-sm font-medium text-gray-700">Assessments Submitted: {assessedCount}</span>
                       </div>
                       <Link href={`/sec/${app.id}`}>
-                        <Button>
-                          View Application
+                        <Button variant={['SUBMITTED', 'IN_REVIEW'].includes(app.status) ? 'primary' : 'outline'}>
+                          {['SUBMITTED', 'IN_REVIEW'].includes(app.status) ? 'Evaluate Application' : 'View (Closed)'}
                         </Button>
                       </Link>
                     </div>

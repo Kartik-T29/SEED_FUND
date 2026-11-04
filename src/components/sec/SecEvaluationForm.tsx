@@ -54,7 +54,8 @@ export default function SecEvaluationForm({
   currentUserId,
   currentUserName,
 }: SecEvaluationFormProps) {
-  const isLocked = initialAssessment?.status === 'SUBMITTED';
+  const isApplicationFinalized = application.status !== 'SUBMITTED' && application.status !== 'IN_REVIEW';
+  const isLocked = initialAssessment?.status === 'SUBMITTED' || isApplicationFinalized;
 
   // Section navigation state: 1 to 5
   const [activeSection, setActiveSection] = useState<number>(1);
@@ -212,10 +213,15 @@ export default function SecEvaluationForm({
         suggestedTotal,
       };
 
-      await saveAssessmentDraftAction(application.id, {
+      const res = await saveAssessmentDraftAction(application.id, {
         statusForm: statusFormData,
         experimentForm: experimentFormData,
       });
+
+      if (res && !res.success) {
+        setErrorMessage(res.error || 'Failed to save assessment draft.');
+        return;
+      }
 
       setIsDirty(false);
       setSaveSuccessMsg('Section draft saved successfully.');
@@ -276,10 +282,15 @@ export default function SecEvaluationForm({
         suggestedTotal,
       };
 
-      await submitAssessmentFinalAction(application.id, {
+      const res = await submitAssessmentFinalAction(application.id, {
         statusForm: statusFormData,
         experimentForm: experimentFormData,
       });
+
+      if (res && !res.success) {
+        setErrorMessage(res.error || 'Final submission failed.');
+        return;
+      }
 
       setIsDirty(false);
       window.location.reload();
@@ -296,7 +307,11 @@ export default function SecEvaluationForm({
     setErrorMessage(null);
     try {
       const names = MILESTONES[milestoneTrack];
-      await claimMilestoneAction(application.id, milestoneTrack, names);
+      const res = await claimMilestoneAction(application.id, milestoneTrack, names);
+      if (res && !res.success) {
+        setErrorMessage(res.error || 'Failed to claim milestone form.');
+        return;
+      }
       window.location.reload();
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to claim milestone form.');
@@ -307,7 +322,11 @@ export default function SecEvaluationForm({
 
   const handleUpdateMilestoneItem = async (itemId: string, newState: 'COMPLETED' | 'PENDING' | 'IN_PROGRESS', remark?: string) => {
     try {
-      await updateMilestoneStateAction(application.id, itemId, newState, remark);
+      const res = await updateMilestoneStateAction(application.id, itemId, newState, remark);
+      if (res && !res.success) {
+        alert(res.error || 'Failed to update milestone item.');
+        return;
+      }
       setMilestoneItems((prev) =>
         prev.map((it) => (it.id === itemId ? { ...it, state: newState, ownerRemark: remark } : it))
       );
@@ -320,7 +339,11 @@ export default function SecEvaluationForm({
     const remark = myMilestoneRemarks[itemId];
     if (!remark || !remark.trim()) return;
     try {
-      await addMilestoneRemarkAction(application.id, itemId, remark.trim());
+      const res = await addMilestoneRemarkAction(application.id, itemId, remark.trim());
+      if (res && !res.success) {
+        alert(res.error || 'Failed to add peer remark.');
+        return;
+      }
       alert('Peer remark added.');
     } catch (err: any) {
       alert(err.message || 'Failed to add peer remark.');
@@ -330,7 +353,11 @@ export default function SecEvaluationForm({
   const handleSubmitMilestoneForm = async () => {
     if (!confirm('Submit and lock the shared milestone assessment?')) return;
     try {
-      await submitMilestoneAction(application.id);
+      const res = await submitMilestoneAction(application.id);
+      if (res && !res.success) {
+        alert(res.error || 'Failed to submit milestone form.');
+        return;
+      }
       window.location.reload();
     } catch (err: any) {
       alert(err.message || 'Failed to submit milestone form.');
@@ -356,7 +383,11 @@ export default function SecEvaluationForm({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-white border border-gray-200 rounded-xl shadow-sm no-print">
         <div className="flex items-center gap-3">
           <Badge variant={isLocked ? 'success' : 'warning'} className="text-xs">
-            {isLocked ? 'Assessment Submitted & Locked' : 'Assessment in Draft'}
+            {isApplicationFinalized
+              ? `Application ${application.status} (Review Closed)`
+              : isLocked
+              ? 'Assessment Submitted & Locked'
+              : 'Assessment in Draft'}
           </Badge>
           <span className="text-sm text-gray-600">
             Evaluator: <strong className="text-gray-900">{currentUserName}</strong>
@@ -375,6 +406,18 @@ export default function SecEvaluationForm({
           </Link>
         </div>
       </div>
+
+      {isApplicationFinalized && (
+        <Alert variant="warning" className="no-print">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <div>
+              <strong className="block font-semibold">Evaluation Closed:</strong>
+              This application has already been finalized ({application.status}). All evaluation fields are in view-only mode and new submissions are disabled.
+            </div>
+          </div>
+        </Alert>
+      )}
 
       {/* Mobile Toggle Tabs */}
       <div className="lg:hidden flex border-b border-gray-200 bg-white rounded-lg p-1 shadow-sm no-print">

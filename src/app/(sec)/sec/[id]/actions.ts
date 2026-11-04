@@ -20,23 +20,34 @@ export async function saveAssessmentDraftAction(
     experimentForm: any;
   }
 ) {
-  const session = await getSession();
-  if (!session || session.role !== 'SEC_MEMBER') {
-    throw new Error('Unauthorized');
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized: SEC Member session required.' };
+    }
+
+    await saveAssessment(
+      { userId: session.userId, role: session.role },
+      applicationId,
+      {
+        statusForm: data.statusForm,
+        experimentForm: data.experimentForm,
+      },
+      false
+    );
+
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveAssessmentDraftAction error:', err);
+    let msg = err.message || 'Failed to save draft.';
+    if (msg.includes('REVIEW_CLOSED')) {
+      msg = 'Evaluation is closed because this application has already been finalized (Approved/Rejected).';
+    } else if (msg.includes('ALREADY_SUBMITTED')) {
+      msg = 'You have already submitted and locked your evaluation for this application.';
+    }
+    return { success: false, error: msg };
   }
-
-  await saveAssessment(
-    { userId: session.userId, role: session.role },
-    applicationId,
-    {
-      statusForm: data.statusForm,
-      experimentForm: data.experimentForm,
-    },
-    false
-  );
-
-  revalidatePath(`/sec/${applicationId}`);
-  return { success: true };
 }
 
 export async function submitAssessmentFinalAction(
@@ -46,41 +57,52 @@ export async function submitAssessmentFinalAction(
     experimentForm: any;
   }
 ) {
-  const session = await getSession();
-  if (!session || session.role !== 'SEC_MEMBER') {
-    throw new Error('Unauthorized');
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized: SEC Member session required.' };
+    }
+
+    // Validate statusForm: TRL, MRL, IRL levels must be selected
+    const sf = data.statusForm || {};
+    if (!sf.trl || !sf.mrl || !sf.irl) {
+      return { success: false, error: 'STATUS_LEVELS_INCOMPLETE: TRL, MRL, and IRL levels must all be evaluated.' };
+    }
+
+    // Validate experimentForm: 12 questions must be answered
+    const ef = data.experimentForm || {};
+    const questions = ef.questions || {};
+    const answeredCount = Object.keys(questions).length;
+    if (answeredCount < 12) {
+      return { success: false, error: `QUESTIONS_INCOMPLETE: All 12 evaluation questions must be answered (currently ${answeredCount}/12).` };
+    }
+
+    if (!ef.grantEvaluation) {
+      return { success: false, error: 'GRANT_EVALUATION_REQUIRED: Please select recommended grant type.' };
+    }
+
+    await saveAssessment(
+      { userId: session.userId, role: session.role },
+      applicationId,
+      {
+        statusForm: data.statusForm,
+        experimentForm: data.experimentForm,
+      },
+      true
+    );
+
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('submitAssessmentFinalAction error:', err);
+    let msg = err.message || 'Final submission failed.';
+    if (msg.includes('REVIEW_CLOSED')) {
+      msg = 'Evaluation is closed because this application has already been finalized (Approved/Rejected).';
+    } else if (msg.includes('ALREADY_SUBMITTED')) {
+      msg = 'You have already submitted and locked your evaluation for this application.';
+    }
+    return { success: false, error: msg };
   }
-
-  // Validate statusForm: TRL, MRL, IRL levels must be selected
-  const sf = data.statusForm || {};
-  if (!sf.trl || !sf.mrl || !sf.irl) {
-    throw new Error('STATUS_LEVELS_INCOMPLETE: TRL, MRL, and IRL levels must all be evaluated.');
-  }
-
-  // Validate experimentForm: 12 questions must be answered
-  const ef = data.experimentForm || {};
-  const questions = ef.questions || {};
-  const answeredCount = Object.keys(questions).length;
-  if (answeredCount < 12) {
-    throw new Error(`QUESTIONS_INCOMPLETE: All 12 evaluation questions must be answered (currently ${answeredCount}/12).`);
-  }
-
-  if (!ef.grantEvaluation) {
-    throw new Error('GRANT_EVALUATION_REQUIRED: Please select recommended grant type.');
-  }
-
-  await saveAssessment(
-    { userId: session.userId, role: session.role },
-    applicationId,
-    {
-      statusForm: data.statusForm,
-      experimentForm: data.experimentForm,
-    },
-    true
-  );
-
-  revalidatePath(`/sec/${applicationId}`);
-  return { success: true };
 }
 
 export async function claimMilestoneAction(
@@ -88,20 +110,29 @@ export async function claimMilestoneAction(
   track: 'PROTOTYPING' | 'PROFESSIONAL',
   milestoneNames: string[]
 ) {
-  const session = await getSession();
-  if (!session || session.role !== 'SEC_MEMBER') {
-    throw new Error('Unauthorized');
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const result = await claimMilestone(
+      { userId: session.userId, role: session.role },
+      applicationId,
+      track,
+      milestoneNames
+    );
+
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true, milestoneId: result.id };
+  } catch (err: any) {
+    console.error('claimMilestoneAction error:', err);
+    let msg = err.message || 'Failed to claim milestone form.';
+    if (msg.includes('ALREADY_CLAIMED')) {
+      msg = 'This milestone assessment has already been claimed by another SEC member.';
+    }
+    return { success: false, error: msg };
   }
-
-  const result = await claimMilestone(
-    { userId: session.userId, role: session.role },
-    applicationId,
-    track,
-    milestoneNames
-  );
-
-  revalidatePath(`/sec/${applicationId}`);
-  return { success: true, milestoneId: result.id };
 }
 
 export async function updateMilestoneStateAction(
@@ -110,38 +141,43 @@ export async function updateMilestoneStateAction(
   state: 'COMPLETED' | 'PENDING' | 'IN_PROGRESS',
   ownerRemark?: string
 ) {
-  const session = await getSession();
-  if (!session || session.role !== 'SEC_MEMBER') {
-    throw new Error('Unauthorized');
-  }
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized' };
+    }
 
-  // Audit log old value vs new value for printed Form A audit trail
-  const currentItem = await prisma.milestoneItem.findUnique({
-    where: { id: itemId },
-    select: { state: true, ownerRemark: true, milestoneId: true },
-  });
-
-  if (currentItem && (currentItem.state !== state || currentItem.ownerRemark !== (ownerRemark || null))) {
-    await prisma.milestoneEditLog.create({
-      data: {
-        milestoneId: currentItem.milestoneId,
-        memberId: session.userId,
-        field: `item_${itemId}_state`,
-        oldValue: `${currentItem.state}${currentItem.ownerRemark ? ` (${currentItem.ownerRemark})` : ''}`,
-        newValue: `${state}${ownerRemark ? ` (${ownerRemark})` : ''}`,
-      },
+    // Audit log old value vs new value for printed Form A audit trail
+    const currentItem = await prisma.milestoneItem.findUnique({
+      where: { id: itemId },
+      select: { state: true, ownerRemark: true, milestoneId: true },
     });
+
+    if (currentItem && (currentItem.state !== state || currentItem.ownerRemark !== (ownerRemark || null))) {
+      await prisma.milestoneEditLog.create({
+        data: {
+          milestoneId: currentItem.milestoneId,
+          memberId: session.userId,
+          field: `item_${itemId}_state`,
+          oldValue: `${currentItem.state}${currentItem.ownerRemark ? ` (${currentItem.ownerRemark})` : ''}`,
+          newValue: `${state}${ownerRemark ? ` (${ownerRemark})` : ''}`,
+        },
+      });
+    }
+
+    await setMilestoneState(
+      { userId: session.userId, role: session.role },
+      itemId,
+      state,
+      ownerRemark
+    );
+
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateMilestoneStateAction error:', err);
+    return { success: false, error: err.message || 'Failed to update milestone item.' };
   }
-
-  await setMilestoneState(
-    { userId: session.userId, role: session.role },
-    itemId,
-    state,
-    ownerRemark
-  );
-
-  revalidatePath(`/sec/${applicationId}`);
-  return { success: true };
 }
 
 export async function addMilestoneRemarkAction(
@@ -149,28 +185,38 @@ export async function addMilestoneRemarkAction(
   itemId: string,
   remark: string
 ) {
-  const session = await getSession();
-  if (!session || session.role !== 'SEC_MEMBER') {
-    throw new Error('Unauthorized');
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    await addMilestoneRemark(
+      { userId: session.userId, role: session.role },
+      itemId,
+      remark
+    );
+
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('addMilestoneRemarkAction error:', err);
+    return { success: false, error: err.message || 'Failed to add remark.' };
   }
-
-  await addMilestoneRemark(
-    { userId: session.userId, role: session.role },
-    itemId,
-    remark
-  );
-
-  revalidatePath(`/sec/${applicationId}`);
-  return { success: true };
 }
 
 export async function submitMilestoneAction(applicationId: string) {
-  const session = await getSession();
-  if (!session || session.role !== 'SEC_MEMBER') {
-    throw new Error('Unauthorized');
-  }
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized' };
+    }
 
-  await submitMilestone({ userId: session.userId, role: session.role }, applicationId);
-  revalidatePath(`/sec/${applicationId}`);
-  return { success: true };
+    await submitMilestone({ userId: session.userId, role: session.role }, applicationId);
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true };
+  } catch (err: any) {
+    console.error('submitMilestoneAction error:', err);
+    return { success: false, error: err.message || 'Failed to submit milestone form.' };
+  }
 }
