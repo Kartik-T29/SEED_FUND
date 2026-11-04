@@ -109,6 +109,7 @@ model Application {
   assessments Assessment[]
   milestone   MilestoneAssessment?
   evaluation  GrantEvaluation?
+  snapshots   ApplicationSnapshot[]
 
   @@index([startupId])
   @@index([status])
@@ -230,4 +231,18 @@ model AuditLog {
   entityId String
   at       DateTime @default(now())
   @@index([entity, entityId])
+}
+
+model ApplicationSnapshot {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  version       Int         @default(1)
+  data          Json
+  dataHash      String
+  reconstructed Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@unique([applicationId, version])
+  @@index([applicationId])
 }
