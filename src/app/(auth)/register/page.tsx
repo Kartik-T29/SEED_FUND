@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
 import { register } from '@/lib/auth-actions';
+import { Logo } from '@/components/brand/Logo';
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,9 @@ export default function RegisterPage() {
         if (result?.details) {
           setDetails(result.details as Record<string, string[]>);
         }
+      } else if (result?.redirectUrl) {
+        window.location.href = result.redirectUrl;
+        return;
       }
     } catch (err: any) {
       console.error('Registration submit error:', err);
@@ -39,6 +43,9 @@ export default function RegisterPage() {
     <div className="min-h-[calc(100vh-130px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-2xl">
         <CardHeader>
+          <div className="flex justify-center mb-3">
+            <Logo size="lg" className="h-11 w-auto" />
+          </div>
           <CardTitle className="text-center text-2xl">Startup Registration</CardTitle>
         </CardHeader>
         <CardContent>

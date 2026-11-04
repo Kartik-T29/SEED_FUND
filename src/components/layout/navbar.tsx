@@ -5,11 +5,12 @@ import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { logout } from '@/lib/auth-actions';
+import { Logo } from '@/components/brand/Logo';
 
 export function Navbar() {
   const pathname = usePathname();
   
-  const isAuthPage = pathname === '/login' || pathname === '/register';
+  const isAuthPage = pathname === '/login' || pathname === '/register' || pathname === '/sec-register';
   
   if (isAuthPage) {
     return (
@@ -17,8 +18,8 @@ export function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex-shrink-0">
-              <Link href="/">
-                <img src="/logo.png" alt="IDEAPAD Logo" className="h-10 w-auto" />
+              <Link href="/" aria-label="IDEAPAD Home">
+                <Logo size="md" className="h-10 w-auto" />
               </Link>
             </div>
           </div>
@@ -32,8 +33,8 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <div className="flex-shrink-0 flex items-center">
-            <Link href="/">
-              <img src="/logo.png" alt="IDEAPAD Logo" className="h-8 w-auto mr-4" />
+            <Link href="/" aria-label="IDEAPAD Home">
+              <Logo size="md" className="h-8 w-auto mr-4" />
             </Link>
             <span className="text-lg font-bold text-gray-800 hidden sm:block border-l pl-4 border-gray-300">
               Seed Fund Portal

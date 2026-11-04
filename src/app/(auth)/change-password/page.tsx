@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from '@/components/ui/card';
 import { Alert } from '@/components/ui/alert';
 import { changePassword } from './actions';
+import { Logo } from '@/components/brand/Logo';
 
 export default function ChangePasswordPage() {
   const [error, setError] = useState<string | null>(null);
@@ -19,9 +20,12 @@ export default function ChangePasswordPage() {
       const result = await changePassword(formData);
       if (result?.error) {
         setError(result.error);
+      } else if (result?.redirectUrl) {
+        window.location.href = result.redirectUrl;
+        return;
       }
-    } catch (e) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (e: any) {
+      setError(e?.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -31,6 +35,9 @@ export default function ChangePasswordPage() {
     <div className="min-h-[calc(100vh-130px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader>
+          <div className="flex justify-center mb-3">
+            <Logo size="lg" className="h-11 w-auto" />
+          </div>
           <CardTitle className="text-center text-2xl">Update Password</CardTitle>
           <CardDescription className="text-center">
             Enter your current password and choose a secure new password.

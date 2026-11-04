@@ -46,8 +46,9 @@ export async function changePassword(formData: FormData) {
   
   await setSessionCookie(token);
   
-  // Redirect to dashboard
-  if (user.role === 'ADMIN') redirect('/admin');
-  if (user.role === 'SEC_MEMBER') redirect('/sec');
-  redirect('/dashboard');
+  let redirectUrl = '/dashboard';
+  if (user.role === 'ADMIN') redirectUrl = '/admin';
+  else if (user.role === 'SEC_MEMBER') redirectUrl = '/sec';
+
+  return { success: true, redirectUrl };
 }

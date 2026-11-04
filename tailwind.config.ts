@@ -28,7 +28,7 @@ const config: Config = {
         danger: 'var(--danger)',
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-inter)', 'Noto Sans Devanagari', 'system-ui', '-apple-system', 'sans-serif'],
       },
       borderRadius: {
         DEFAULT: '0.5rem',
