@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { canReadDocument, Forbidden } from "@/lib/access";
-import { readFile } from "fs/promises";
+import { getStorageAdapter } from "@/lib/storage";
 import path from "path";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getSession();
     if (!session) {
-      return new NextResponse("Not Found", { status: 404 });
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const { id } = params;
     const doc = await canReadDocument(session, id);
+    const storage = getStorageAdapter();
 
     let buffer: Buffer;
     let contentType = "application/octet-stream";
@@ -39,7 +42,7 @@ export async function GET(
       else if (ext === ".jpg" || ext === ".jpeg") contentType = "image/jpeg";
       else if (ext === ".png") contentType = "image/png";
 
-      buffer = await readFile(doc.path);
+      buffer = await storage.readFile(doc.path);
       filename = path.basename(doc.path);
     }
 
@@ -49,12 +52,14 @@ export async function GET(
         "Content-Type": contentType,
         "Content-Disposition": `inline; filename="${filename}"`,
         "Cache-Control": "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error) {
     if (error instanceof Forbidden) {
       return new NextResponse("Not Found", { status: 404 });
     }
+    console.error("Document access error:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
