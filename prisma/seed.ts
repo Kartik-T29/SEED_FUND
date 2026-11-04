@@ -83,7 +83,38 @@ async function main() {
     }
   }
 
-  // 3. Demo startup for dev/test environments only
+  // 3. Seed Signatories Settings
+  const defaultSignatories = [
+    {
+      key: "head_incubation",
+      name: "Mr. Aakash Kumar Shukla",
+      designation: "Head, Incubation and Startups, IDEAPAD",
+      sortOrder: 1,
+    },
+    {
+      key: "director_ideapad",
+      name: "Ashish Chandel",
+      designation: "Professor of Practice and Director, IDEAPAD",
+      sortOrder: 2,
+    },
+    {
+      key: "vice_chancellor",
+      name: "",
+      designation: "Vice Chancellor, ITM University, Gwalior",
+      sortOrder: 3,
+    },
+  ];
+
+  for (const sig of defaultSignatories) {
+    await prisma.signatorySetting.upsert({
+      where: { key: sig.key },
+      update: {},
+      create: sig,
+    });
+  }
+  console.log("Official Signatories seeded.");
+
+  // 4. Demo startup for dev/test environments only
   const demoStartupEmail = process.env.DEMO_STARTUP_EMAIL;
   const demoStartupPass = process.env.DEMO_STARTUP_PASSWORD;
   if (demoStartupEmail && demoStartupPass) {

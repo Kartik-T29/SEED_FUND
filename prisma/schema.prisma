@@ -72,6 +72,7 @@ model User {
   milestones  MilestoneAssessment[]
   remarks     MilestoneRemark[]
   evaluations GrantEvaluation[]
+  panelMemberships ApplicationPanelMember[]
 
   @@index([role, approvalStatus])
 }
@@ -110,6 +111,7 @@ model Application {
   milestone   MilestoneAssessment?
   evaluation  GrantEvaluation?
   snapshots   ApplicationSnapshot[]
+  panelMembers ApplicationPanelMember[]
 
   @@index([startupId])
   @@index([status])
@@ -229,6 +231,7 @@ model AuditLog {
   action   String
   entity   String
   entityId String
+  details  String?
   at       DateTime @default(now())
   @@index([entity, entityId])
 }
@@ -245,4 +248,28 @@ model ApplicationSnapshot {
 
   @@unique([applicationId, version])
   @@index([applicationId])
+}
+
+model ApplicationPanelMember {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        User        @relation(fields: [memberId], references: [id])
+  position      Int         // Fixed positions 1, 2, 3
+  assignedAt    DateTime    @default(now())
+
+  @@unique([applicationId, position])
+  @@unique([applicationId, memberId])
+  @@index([applicationId])
+}
+
+model SignatorySetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String   // Can be empty if not yet provided by admin
+  designation String
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
