@@ -159,42 +159,80 @@ async function runPolicyAlignmentTests() {
   const appWithAgreement = await getApplication(startupSession, draftApp.id);
   pass('Accepted Policy Agreement', `Agreement accepted by ${founderName}`);
 
-  // Upload required documents: Pitch Deck, PAN, Aadhaar, Photo, and Equipment Quotation
-  const dummyBuffer = Buffer.from('%PDF-1.4 test dummy document buffer data');
+  // Test document upload size boundary enforcement:
+  // Pitch deck: 5–7 MB (max 7 MB allowed)
+  const oversizedDeckBuffer = Buffer.alloc(8 * 1024 * 1024, '%PDF-oversized'); // 8 MB
+  try {
+    await addDocument(
+      startupSession,
+      draftApp.id,
+      { name: 'oversized_deck.pdf', type: 'application/pdf', size: oversizedDeckBuffer.length, buffer: oversizedDeckBuffer },
+      'DECK'
+    );
+    fail('Pitch Deck Size Enforcement', 'Oversized pitch deck (8MB) was not blocked');
+  } catch (err: any) {
+    if (!err.message.includes('FILE_TOO_LARGE') || !err.message.includes('7 MB')) {
+      fail('Pitch Deck Size Error Format', err.message);
+    }
+    pass('Pitch Deck Size Gate (>7MB Blocked)', err.message);
+  }
+
+  // Other documents: 200–500 KB (max 500 KB allowed)
+  const oversizedPanBuffer = Buffer.alloc(600 * 1024, '%PDF-oversized-kyc'); // 600 KB
+  try {
+    await addDocument(
+      startupSession,
+      draftApp.id,
+      { name: 'oversized_pan.pdf', type: 'application/pdf', size: oversizedPanBuffer.length, buffer: oversizedPanBuffer },
+      'PAN',
+      founderName
+    );
+    fail('KYC Doc Size Enforcement', 'Oversized KYC document (600KB) was not blocked');
+  } catch (err: any) {
+    if (!err.message.includes('FILE_TOO_LARGE') || !err.message.includes('500 KB')) {
+      fail('KYC Doc Size Error Format', err.message);
+    }
+    pass('KYC Doc Size Gate (>500KB Blocked)', err.message);
+  }
+
+  // Upload valid documents: Pitch Deck (within 5–7 MB range), PAN/Aadhaar/Photo/Quotation (within 200–500 KB range)
+  const validDeckBuffer = Buffer.alloc(5.5 * 1024 * 1024, '%PDF-valid-pitch-deck-5.5MB');
   await addDocument(
     startupSession,
     draftApp.id,
-    { name: 'pitch_deck.pdf', type: 'application/pdf', size: dummyBuffer.length, buffer: dummyBuffer },
+    { name: 'pitch_deck.pdf', type: 'application/pdf', size: validDeckBuffer.length, buffer: validDeckBuffer },
     'DECK'
   );
+
+  const validKycBuffer = Buffer.alloc(300 * 1024, '%PDF-valid-kyc-300KB');
   await addDocument(
     startupSession,
     draftApp.id,
-    { name: 'pan.pdf', type: 'application/pdf', size: dummyBuffer.length, buffer: dummyBuffer },
+    { name: 'pan.pdf', type: 'application/pdf', size: validKycBuffer.length, buffer: validKycBuffer },
     'PAN',
     founderName
   );
   await addDocument(
     startupSession,
     draftApp.id,
-    { name: 'aadhaar.pdf', type: 'application/pdf', size: dummyBuffer.length, buffer: dummyBuffer },
+    { name: 'aadhaar.pdf', type: 'application/pdf', size: validKycBuffer.length, buffer: validKycBuffer },
     'AADHAAR',
     founderName
   );
   await addDocument(
     startupSession,
     draftApp.id,
-    { name: 'photo.png', type: 'image/png', size: dummyBuffer.length, buffer: dummyBuffer },
+    { name: 'photo.png', type: 'image/png', size: validKycBuffer.length, buffer: validKycBuffer },
     'PHOTO',
     founderName
   );
   await addDocument(
     startupSession,
     draftApp.id,
-    { name: 'quotation.pdf', type: 'application/pdf', size: dummyBuffer.length, buffer: dummyBuffer },
+    { name: 'quotation.pdf', type: 'application/pdf', size: validKycBuffer.length, buffer: validKycBuffer },
     'QUOTATION'
   );
-  pass('Uploaded required documents', 'Deck, KYC (PAN/Aadhaar/Photo), and Equipment Quotation attached');
+  pass('Uploaded required documents within limits', '5.5MB Deck (5–7 MB allowed) & 300KB KYC docs (200–500 KB allowed) successfully stored');
 
   // Save full form data meeting all policy validations (P6)
   const fullPolicyFormData = {

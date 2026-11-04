@@ -416,19 +416,19 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
     if (!file) return;
 
     const maxLimit = docType === 'DECK' ? 7 * 1024 * 1024 : 500 * 1024;
-    const limitLabel = docType === 'DECK' ? '7 MB' : '500 KB';
+    const limitLabel = docType === 'DECK' ? '5–7 MB (max 7 MB)' : '200–500 KB (max 500 KB)';
 
     // Client-side image compression for photos / scanned documents > 500 KB
     if (file.type.startsWith('image/') && file.size > 500 * 1024) {
       try {
-        file = await compressImage(file, 500 * 1024);
+        file = await compressImage(file, 450 * 1024);
       } catch (err) {
         console.warn('Image compression fallback:', err);
       }
     }
 
     if (file.size > maxLimit) {
-      alert(`File size exceeds the ${limitLabel} limit. Please select a file under ${limitLabel}.`);
+      alert(`File size exceeds the allowed limit for ${docType === 'DECK' ? 'Pitch Deck (5–7 MB, max 7 MB)' : 'documents (200–500 KB, max 500 KB)'}. Please select a file under ${limitLabel}.`);
       e.target.value = '';
       return;
     }
@@ -1287,7 +1287,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
                             <div className="flex items-center gap-2 text-amber-900 font-medium text-xs">
                               <Info className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                              Equipment and Capital purchases require an uploaded quotation (PDF or image).
+                              Equipment and Capital purchases require an uploaded quotation (PDF or image, 200–500 KB, max 500 KB).
                             </div>
                             <div className="flex flex-wrap gap-2 items-center">
                               {documents
@@ -1790,7 +1790,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                   Optional Annexure Upload (Screenshots & Supporting Evidence)
                 </label>
                 <p className="text-xs text-gray-500">
-                  Upload screenshots of your prototype, CAD designs, software UI, or data charts (PDF/JPG/PNG, max 500 KB).
+                  Upload screenshots of your prototype, CAD designs, software UI, or data charts (PDF/JPG/PNG, 200–500 KB, max 500 KB).
                 </p>
 
                 <div className="flex flex-wrap gap-2 items-center pt-1">
@@ -1868,7 +1868,7 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
               <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
               <div>
                 <strong className="block font-semibold">What the Startup must provide:</strong>
-                Upload mandatory supporting documents: startup pitch deck (PDF, max 7MB), founder KYC (PAN, Aadhaar, photo), equipment vendor quotations, and prior grant utilization reports if applicable.
+                Upload mandatory supporting documents: startup pitch deck (PDF, 5–7 MB, max 7 MB), founder KYC (PAN, Aadhaar, photo: 200–500 KB each), equipment vendor quotations (200–500 KB), and prior grant utilization reports if applicable.
               </div>
             </div>
             <CardTitle>Documents & Team KYC</CardTitle>
@@ -1882,10 +1882,10 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="font-semibold text-gray-900 text-sm">
-                    Pitch Deck (PDF) <span className="text-danger">*</span>
+                    Pitch Deck (PDF, 5–7 MB) <span className="text-danger">*</span>
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Share the deck with IDEAPAD 2 days before your SEC presentation.
+                    Share the deck with IDEAPAD 2 days before your SEC presentation (PDF format, 5–7 MB, max 7 MB).
                   </p>
                 </div>
                 {documents.some((d) => d.type === 'DECK') && (
@@ -1944,10 +1944,10 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="font-semibold text-amber-950 text-sm">
-                      Previous Grant Utilization Report <span className="text-danger">*</span>
+                      Previous Grant Utilization Report (PDF, 200–500 KB) <span className="text-danger">*</span>
                     </h3>
                     <p className="text-xs text-amber-800 mt-0.5">
-                      Required because you indicated your team previously received a seed grant.
+                      Required because you indicated your team previously received a seed grant (PDF/JPG/PNG, 200–500 KB, max 500 KB).
                     </p>
                   </div>
                   {documents.some((d) => d.type === 'UTILIZATION_REPORT') && (
@@ -2006,10 +2006,10 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="font-semibold text-gray-900 text-sm">
-                    Team Members & KYC <span className="text-danger">*</span>
+                    Team Members & KYC (200–500 KB each) <span className="text-danger">*</span>
                   </h3>
                   <p className="text-xs text-gray-500">
-                    Upload PAN, Aadhaar, and Passport Photo for each team member.
+                    Upload PAN, Aadhaar, and Passport Photo for each team member (PDF/JPG/PNG, 200–500 KB only).
                   </p>
                 </div>
                 {!isReadOnly && (

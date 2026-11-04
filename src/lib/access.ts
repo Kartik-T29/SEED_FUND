@@ -327,11 +327,11 @@ export async function addDocument(
   });
   if (!app) throw new Forbidden("NOT_FOUND");
 
-  // Validate size: 7 MB for pitch deck, 500 KB for other documents
+  // Validate size: 5–7 MB (max 7 MB) for pitch deck, 200–500 KB (max 500 KB) for other documents (PAN, Aadhaar, Photo, Quotation, Utilization)
   const maxLimit = docType === "DECK" ? 7 * 1024 * 1024 : 500 * 1024;
   if (file.size > maxLimit || file.buffer.length > maxLimit) {
-    const limitLabel = docType === "DECK" ? "7 MB" : "500 KB";
-    throw new Error(`FILE_TOO_LARGE: ${limitLabel} maximum`);
+    const limitLabel = docType === "DECK" ? "5–7 MB (max 7 MB)" : "200–500 KB (max 500 KB)";
+    throw new Error(`FILE_TOO_LARGE: ${limitLabel} allowed`);
   }
 
   // Validate MIME and extension
