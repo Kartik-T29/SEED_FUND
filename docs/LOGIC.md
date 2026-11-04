@@ -182,3 +182,27 @@ Policy clause P9 mandates the creation of Form B ("Grant Evaluation Report by St
 - **Admin:**
   - Dashboard tracking pipeline metrics.
   - Application view with dual-pane comparison: side-by-side SEC evaluations on the left, Form B sanction order workflow on the right.
+
+---
+
+## 7. Startup Application PDF Download & Immutable Snapshots
+
+To comply with Seed Fund Policy Section P6 and ensure tamper-proof institutional record-keeping:
+
+### 1. Snapshot Persistence on Submit
+- When a startup submits an application, a canonical JSON snapshot (`CanonicalApplicationData`) and its SHA-256 data hash are persisted in `ApplicationSnapshot` within the exact same database transaction as `Application.update({ status: 'SUBMITTED' })`.
+- If an application undergoes re-presentation/revision, each submission generates a distinct version snapshot (`v1`, `v2`, etc.). Historical snapshots remain strictly immutable and are never modified when newer versions are edited or submitted.
+- Legacy applications submitted prior to this feature are automatically reconstructed upon first download request from the locked live data and marked `reconstructed: true`.
+
+### 2. Session-Derived Server Enforcement (Zero IDOR)
+- Route: `GET /dashboard/application/download`
+- **Zero Client Application IDs**: The route derives the application strictly from the logged-in session (`session.userId`). Changing URL parameters like `?id=...` or `?applicationId=...` is completely ignored by the server.
+- **Draft Lockdown**: Draft applications cannot be downloaded (`HTTP 403 Forbidden` with `"You can download your application after you submit it."`). The UI disables the download button with this guidance tooltip.
+- **Role Isolation**: Admin and SEC roles receive `HTTP 403 Forbidden` on this endpoint and utilize their own authorized print routes (`/admin/application/[id]/print` and `/sec/[id]/print`).
+- **Rate Limiting**: Enforces 10 downloads per minute per user (`HTTP 429`). Every download writes an immutable record to `AuditLog`.
+
+### 3. PDF Structure & Privacy Protection
+- Renders in policy order (P6) with the official IDEAPAD Incubator header logo, applicant details, problem/solution/traction, 10 experiment sections, Annexure 1 itemized budget table, justifications, TRL/MRL/IRL self-assessment, milestone track, document registry, declaration, and agreement hash.
+- **Devanagari (Hindi) Support**: Utilizes bundled `NotoSansDevanagari-Regular.ttf` and `NotoSansDevanagari-Bold.ttf` with dynamic font switching to cleanly render Hindi names, bilingual project descriptions, and Devanagari text alongside standard Helvetica.
+- **Privacy Enforcement**: Identity documents (PAN, Aadhaar) are listed by type and filename only. Raw document paths, binary images, and ID numbers are completely excluded. Evaluator scores, Form A/B data, reviewer identities, and panel notes are strictly omitted.
+- **Running Footers**: Every page displays form name, application ID, `Page x of y`, generation timestamp in IST, and the first 12 characters of the canonical SHA-256 data hash.
