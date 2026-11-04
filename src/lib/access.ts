@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 import type { Role, AppStatus, Prisma, GrantType, DocType } from "@prisma/client";
 import { AGREEMENT_VERSION, getAgreementTextHash } from "./agreement";
 import { GRANT_RANGES } from "./seedfund-constants";
+import { getStorageAdapter } from "./storage";
 import path from "path";
 import { mkdir, writeFile, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
@@ -35,7 +36,8 @@ export async function getApplication(s: Session, id: string) {
       budgetItems: true,
       documents: true,
       startup: { include: { user: true } },
-      milestone: { include: { items: { include: { remarks: true } } } },
+      milestone: { include: { items: { include: { remarks: true } }, owner: { select: { id: true, name: true } } } },
+      evaluation: true,
     },
   });
   if (!app) throw new Forbidden("NOT_FOUND"); // 404 not 403: don't reveal that it exists
@@ -344,9 +346,8 @@ export async function addDocument(
     throw new Error("INVALID_FILE_EXTENSION");
   }
 
-  // Store file directly in database as base64 data URI (compatible with Vercel serverless read-only filesystem)
-  const safeName = encodeURIComponent(file.name.replace(/[^a-zA-Z0-9._-]/g, "_"));
-  const dataUri = `data:${file.type};name=${safeName};base64,${file.buffer.toString("base64")}`;
+  const storage = getStorageAdapter();
+  const filePath = await storage.saveFile(file.buffer, file.name, file.type);
 
   // If a document of the same type (and memberLabel) already exists for this draft, replace it
   const existingDoc = await prisma.document.findFirst({
@@ -358,9 +359,10 @@ export async function addDocument(
   });
 
   if (existingDoc) {
+    await storage.deleteFile(existingDoc.path);
     return prisma.document.update({
       where: { id: existingDoc.id },
-      data: { path: dataUri },
+      data: { path: filePath },
     });
   }
 
@@ -369,7 +371,7 @@ export async function addDocument(
       applicationId,
       type: docType,
       memberLabel: memberLabel || null,
-      path: dataUri,
+      path: filePath,
     },
   });
 }
@@ -387,14 +389,8 @@ export async function removeDocument(s: Session, documentId: string) {
 
   await prisma.document.delete({ where: { id: documentId } });
 
-  // Clean up legacy local file on disk if path was a file path
-  if (!doc.path.startsWith("data:")) {
-    try {
-      await unlink(doc.path);
-    } catch {
-      // Ignore if already removed from disk
-    }
-  }
+  const storage = getStorageAdapter();
+  await storage.deleteFile(doc.path);
 
   return { success: true };
 }

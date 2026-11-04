@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-change-me-in-production');
+function getJwtSecret(): Uint8Array {
+  return new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-change-me-in-production');
+}
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'ideapad_session';
 
 // Routes that don't require authentication
-const publicRoutes = ['/', '/login', '/register', '/sec-register'];
+const publicRoutes = ['/', '/login', '/register', '/sec-register', '/health'];
 
 const roleRoutes: Record<string, string[]> = {
   STARTUP: ['/dashboard', '/apply', '/status'],
@@ -17,12 +19,13 @@ const roleRoutes: Record<string, string[]> = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public assets and API auth routes
+  // Allow public assets, brand files, health check, and API auth routes
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth') ||
     pathname === '/favicon.ico' ||
-    pathname.startsWith('/logo')
+    pathname.startsWith('/brand') ||
+    pathname === '/health'
   ) {
     return NextResponse.next();
   }
@@ -34,43 +37,38 @@ export async function middleware(request: NextRequest) {
   if (publicRoutes.includes(pathname)) {
     if (token) {
       try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
+        const { payload } = await jwtVerify(token, getJwtSecret());
         const role = payload.role as string;
         if (payload.mustChangePassword) {
           return NextResponse.redirect(new URL('/change-password', request.url));
         }
-        // Redirect to appropriate dashboard
         if (role === 'STARTUP') return NextResponse.redirect(new URL('/dashboard', request.url));
         if (role === 'SEC_MEMBER') return NextResponse.redirect(new URL('/sec', request.url));
         if (role === 'ADMIN') return NextResponse.redirect(new URL('/admin', request.url));
       } catch {
-        // Invalid token, continue to public page
+        // Token invalid, allow accessing public page
       }
     }
     return NextResponse.next();
   }
 
-  // Protected routes - require authentication
+  // Protected routes - require token
   if (!token) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const role = payload.role as string;
-    const mustChangePassword = payload.mustChangePassword as boolean;
 
-    // Force password change
-    if (mustChangePassword && pathname !== '/change-password') {
+    // Force password change if required
+    if (payload.mustChangePassword && pathname !== '/change-password') {
       return NextResponse.redirect(new URL('/change-password', request.url));
     }
 
-    // Allow change-password route for anyone authenticated
-    if (pathname === '/change-password') {
-      return NextResponse.next();
-    }
-
-    // Check role-based access
+    // Role-based route protection
     const allowedPrefixes = roleRoutes[role] || [];
     const hasAccess = allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
 
@@ -97,5 +95,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|brand|health).*)'],
 };

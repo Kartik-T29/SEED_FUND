@@ -3,7 +3,9 @@ import { hash, compare } from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { Role } from '@prisma/client';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-change-me-in-production');
+function getJwtSecret(): Uint8Array {
+  return new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-change-me-in-production');
+}
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'ideapad_session';
 const SESSION_DURATION = 7 * 24 * 60 * 60; // 7 days in seconds
 
@@ -27,13 +29,13 @@ export async function createSession(payload: Omit<SessionPayload, 'exp'>): Promi
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DURATION}s`)
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
   return token;
 }
 
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload as unknown as SessionPayload;
   } catch {
     return null;
@@ -51,7 +53,7 @@ export async function setSessionCookie(token: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.COOKIE_SECURE === 'true',
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_DURATION,
@@ -60,7 +62,14 @@ export async function setSessionCookie(token: string): Promise<void> {
 
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
+  cookieStore.set(COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE === 'true',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+    expires: new Date(0),
+  });
 }
 
 export function requireRole(session: SessionPayload | null, ...roles: Role[]): SessionPayload {

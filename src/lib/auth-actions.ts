@@ -51,15 +51,16 @@ export async function login(formData: FormData) {
   
   await setSessionCookie(token);
   
+  let redirectUrl = '/dashboard';
   if (user.mustChangePassword) {
-    redirect('/change-password');
+    redirectUrl = '/change-password';
   } else if (user.role === 'ADMIN') {
-    redirect('/admin');
+    redirectUrl = '/admin';
   } else if (user.role === 'SEC_MEMBER') {
-    redirect('/sec'); // updated to match homeFor in access.ts
-  } else {
-    redirect('/dashboard');
+    redirectUrl = '/sec';
   }
+
+  return { success: true, redirectUrl };
 }
 
 export async function register(formData: FormData) {
@@ -125,12 +126,11 @@ export async function register(formData: FormData) {
     });
     
     await setSessionCookie(token);
+    return { success: true, redirectUrl: '/dashboard' };
   } catch (error: any) {
     console.error('Startup registration error:', error);
     return { error: error?.message || 'Database error during registration. Please verify connection.' };
   }
-
-  redirect('/dashboard');
 }
 
 export async function logout() {
