@@ -638,46 +638,106 @@ export async function getStartupSubmissionForDownload(
   s: Session,
   options?: { version?: number; applicationId?: string }
 ) {
-  requireRole(s, "STARTUP");
-  const startup = await prisma.startup.findUnique({
-    where: { userId: s.userId },
-  });
-  if (!startup) throw new Forbidden("NO_STARTUP");
+  requireRole(s, "STARTUP", "ADMIN", "SEC_MEMBER");
 
-  // Derive application exclusively from startup ownership
   let app = null;
-  if (options?.applicationId) {
-    app = await prisma.application.findFirst({
-      where: { id: options.applicationId, startupId: startup.id },
-      include: {
-        startup: { include: { user: true } },
-        budgetItems: true,
-        documents: true,
-      },
-    });
-  }
 
-  if (!app) {
-    // Latest submitted / reviewable application for this startup
-    app = await prisma.application.findFirst({
-      where: { startupId: startup.id, status: { not: "DRAFT" } },
-      orderBy: { submittedAt: "desc" },
-      include: {
-        startup: { include: { user: true } },
-        budgetItems: true,
-        documents: true,
-      },
+  if (s.role === "STARTUP") {
+    const startup = await prisma.startup.findUnique({
+      where: { userId: s.userId },
     });
-  }
+    if (!startup) throw new Forbidden("NO_STARTUP");
 
-  if (!app) {
-    // If only draft exists, throw DRAFT_NOT_DOWNLOADABLE so route returns 403
-    const draft = await prisma.application.findFirst({
-      where: { startupId: startup.id, status: "DRAFT" },
-    });
-    if (draft) {
-      throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
+    // Derive application exclusively from startup ownership
+    if (options?.applicationId) {
+      app = await prisma.application.findFirst({
+        where: { id: options.applicationId, startupId: startup.id },
+        include: {
+          startup: { include: { user: true } },
+          budgetItems: true,
+          documents: true,
+        },
+      });
     }
+
+    if (!app) {
+      // Latest submitted / reviewable application for this startup
+      app = await prisma.application.findFirst({
+        where: { startupId: startup.id, status: { not: "DRAFT" } },
+        orderBy: { submittedAt: "desc" },
+        include: {
+          startup: { include: { user: true } },
+          budgetItems: true,
+          documents: true,
+        },
+      });
+    }
+
+    if (!app) {
+      const draft = await prisma.application.findFirst({
+        where: { startupId: startup.id, status: "DRAFT" },
+      });
+      if (draft) {
+        throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
+      }
+      throw new Forbidden("NOT_FOUND");
+    }
+  } else if (s.role === "SEC_MEMBER") {
+    // SEC member: must be active & approved, and assigned to this application's panel
+    const secUser = await prisma.user.findUnique({
+      where: { id: s.userId },
+      select: { approvalStatus: true, active: true },
+    });
+    if (!secUser || secUser.approvalStatus !== "APPROVED" || !secUser.active) {
+      throw new Forbidden("NOT_APPROVED_SEC");
+    }
+
+    if (!options?.applicationId) throw new Forbidden("APPLICATION_ID_REQUIRED");
+
+    const panelMember = await prisma.applicationPanelMember.findUnique({
+      where: { applicationId_memberId: { applicationId: options.applicationId, memberId: s.userId } },
+    });
+    if (!panelMember) {
+      throw new Forbidden("NOT_A_PANEL_MEMBER");
+    }
+
+    app = await prisma.application.findFirst({
+      where: { id: options.applicationId, status: { not: "DRAFT" } },
+      include: {
+        startup: { include: { user: true } },
+        budgetItems: true,
+        documents: true,
+      },
+    });
+
+    if (!app) {
+      const draft = await prisma.application.findFirst({
+        where: { id: options.applicationId, status: "DRAFT" },
+      });
+      if (draft) throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
+      throw new Forbidden("NOT_FOUND");
+    }
+  } else if (s.role === "ADMIN") {
+    if (!options?.applicationId) throw new Forbidden("APPLICATION_ID_REQUIRED");
+    app = await prisma.application.findFirst({
+      where: { id: options.applicationId, status: { not: "DRAFT" } },
+      include: {
+        startup: { include: { user: true } },
+        budgetItems: true,
+        documents: true,
+      },
+    });
+
+    if (!app) {
+      const draft = await prisma.application.findFirst({
+        where: { id: options.applicationId, status: "DRAFT" },
+      });
+      if (draft) throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
+      throw new Forbidden("NOT_FOUND");
+    }
+  }
+
+  if (!app) {
     throw new Forbidden("NOT_FOUND");
   }
 
@@ -740,6 +800,10 @@ export async function getStartupSubmissionForDownload(
           documents: true,
         },
       })) || app;
+
+    if (!targetApp) {
+      throw new Forbidden("NOT_FOUND");
+    }
 
     const canonicalData = buildApplicationData(targetApp);
     const { fullHash } = canonicalizeApplicationData(canonicalData);

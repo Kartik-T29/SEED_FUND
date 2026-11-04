@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Printer,
+  Download,
   Info,
   ShieldCheck,
   Send,
@@ -39,7 +40,8 @@ interface AdminFormBProps {
     milestoneSubmitted: boolean;
   };
   signatories: Array<{
-    title: string;
+    key?: string;
+    title?: string;
     name: string;
     designation: string;
     department?: string;
@@ -205,14 +207,29 @@ export default function AdminFormB({
             Startup: <strong className="text-gray-900">{application.startup.teamName}</strong> ({application.startup.enrollmentNo})
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href={`/admin/application/${application.id}/print`} target="_blank">
-            <Button variant="outline" size="sm" className="flex items-center gap-1.5">
-              <Printer className="w-4 h-4" /> Printable Form B
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
+              <Printer className="w-3.5 h-3.5" /> Printable Form B
+            </Button>
+          </Link>
+          <Link href={`/admin/application/${application.id}/pdf`} target="_blank">
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
+              <Download className="w-3.5 h-3.5" /> Form B PDF
+            </Button>
+          </Link>
+          <Link href={`/sec/${application.id}/pdf`} target="_blank">
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
+              <Download className="w-3.5 h-3.5" /> Form A PDF
+            </Button>
+          </Link>
+          <Link href={`/dashboard/application/download?applicationId=${application.id}`} target="_blank">
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
+              <Download className="w-3.5 h-3.5" /> Startup App PDF
             </Button>
           </Link>
           <Link href="/admin">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="text-xs">
               Dashboard
             </Button>
           </Link>
@@ -696,18 +713,20 @@ export default function AdminFormB({
                   </label>
                 </div>
 
-                {/* 5 Approval Signatories from Profiles */}
+                {/* Approval Signatories from Settings */}
                 <div className="space-y-3">
                   <h4 className="font-bold text-gray-900 text-xs uppercase tracking-wider">
-                    Official Signatories (Populated from Profiles):
+                    Official Signatories (Populated from Settings):
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     {signatories.map((sig, i) => (
                       <div key={i} className="p-3 bg-white border rounded-lg space-y-1">
                         <span className="text-[10px] text-gray-400 block uppercase font-bold">
-                          {sig.title}
+                          {sig.title || sig.key || `Signatory ${i + 1}`}
                         </span>
-                        <strong className="text-gray-900 block">{sig.name}</strong>
+                        <strong className="text-gray-900 block">
+                          {sig.name || <span className="text-amber-600 italic">[Pending Name Entry]</span>}
+                        </strong>
                         <span className="text-gray-600 block">{sig.designation}</span>
                         {sig.department && (
                           <span className="text-gray-400 block text-[11px]">{sig.department}</span>

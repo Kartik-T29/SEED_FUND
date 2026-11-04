@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     }
 
-    if (session.role !== 'STARTUP') {
-      return NextResponse.json({ error: 'FORBIDDEN: Only startups can download their application' }, { status: 403 });
+    if (session.role !== 'STARTUP' && session.role !== 'ADMIN' && session.role !== 'SEC_MEMBER') {
+      return NextResponse.json({ error: 'FORBIDDEN: Unauthorized to download this application' }, { status: 403 });
     }
 
     // Rate Limit Check
@@ -50,12 +50,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const versionParam = searchParams.get('version');
     const requestedVersion = versionParam ? parseInt(versionParam, 10) : undefined;
+    const requestedAppId = searchParams.get('applicationId') || searchParams.get('id') || undefined;
 
-    // Server-enforced: NO application ID accepted from query parameters.
-    // Derived strictly from the authenticated startup's session.
+    // Server-enforced:
+    // If STARTUP: derives application exclusively from session ownership (ignoring tampering).
+    // If ADMIN or SEC: uses requestedAppId and checks panel authorization.
     const { application, snapshot } = await getStartupSubmissionForDownload(
       { userId: session.userId, role: session.role },
-      { version: requestedVersion }
+      {
+        version: requestedVersion,
+        applicationId: session.role === 'STARTUP' ? undefined : requestedAppId,
+      }
     );
 
     const canonicalData = snapshot.data as unknown as CanonicalApplicationData;
@@ -99,7 +104,14 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       );
     }
-    if (err.message === 'FORBIDDEN' || err.message === 'UNAUTHENTICATED' || err.message === 'NO_STARTUP') {
+    if (
+      err.message === 'FORBIDDEN' ||
+      err.message === 'UNAUTHENTICATED' ||
+      err.message === 'NO_STARTUP' ||
+      err.message === 'NOT_A_PANEL_MEMBER' ||
+      err.message === 'NOT_APPROVED_SEC' ||
+      err.message === 'APPLICATION_ID_REQUIRED'
+    ) {
       return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
     }
     if (err.message === 'NOT_FOUND') {

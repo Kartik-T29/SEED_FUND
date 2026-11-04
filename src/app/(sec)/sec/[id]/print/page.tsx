@@ -1,17 +1,10 @@
 import { getSession } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { getApplication } from '@/lib/access';
-import { prisma } from '@/lib/prisma';
+import { buildFormAData, canonicalizeFormAData } from '@/lib/form-a-data';
+import { logFormPrintAudit } from '@/lib/access';
 import { Logo } from '@/components/brand/Logo';
-import {
-  LEVELS,
-  EXPERIMENT_QUESTIONS,
-  BUDGET_HEADERS,
-  TRACK_LABELS,
-} from '@/lib/seedfund-constants';
-import { formatISTDate, formatISTDateTime } from '@/lib/dates';
-import Link from 'next/link';
 import PrintButton from '@/components/ui/PrintButton';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,194 +15,286 @@ export default async function PrintableFormA({ params }: { params: { id: string 
   }
 
   const { id } = await Promise.resolve(params);
-  const app = await getApplication(session as any, id);
 
-  // Fetch all assessments for this application
-  const assessments = await prisma.assessment.findMany({
-    where: { applicationId: id },
-    include: {
-      member: {
-        select: { id: true, name: true, designation: true, department: true },
-      },
-    },
-  });
+  let data;
+  try {
+    data = await buildFormAData(id, session as any);
+  } catch (err: any) {
+    if (err.message === 'NOT_A_PANEL_MEMBER') {
+      return (
+        <div className="max-w-lg mx-auto mt-20 p-6 bg-red-50 border border-red-200 rounded-lg text-center font-sans">
+          <h2 className="text-lg font-bold text-red-900 mb-2">Access Denied</h2>
+          <p className="text-sm text-red-700 mb-4">
+            You are not an assigned member of the 3-expert evaluation panel for this application. Form A is accessible only to the 3 panel members and administrators.
+          </p>
+          <Link href="/sec" className="inline-block px-4 py-2 bg-red-800 text-white text-xs font-semibold rounded">
+            Return to SEC Dashboard
+          </Link>
+        </div>
+      );
+    }
+    throw err;
+  }
 
-  // Fetch milestone edit logs for the correction audit trail
-  const editLogs = app.milestone
-    ? await prisma.milestoneEditLog.findMany({
-        where: { milestoneId: app.milestone.id },
-        orderBy: { at: 'asc' },
-      })
-    : [];
+  const { shortHash } = canonicalizeFormAData(data);
 
-  // Fetch approved SEC members to ensure names come dynamically from profiles (P3)
-  const secProfiles = await prisma.user.findMany({
-    where: { role: 'SEC_MEMBER', approvalStatus: 'APPROVED' },
-    select: { id: true, name: true, designation: true, department: true },
-    take: 3,
-  });
+  // Server-side audit log for print preview
+  await logFormPrintAudit(session as any, 'FORM_A', id, shortHash, false);
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 p-8 max-w-5xl mx-auto font-sans">
-      {/* Print action controls (hidden when printing) */}
-      <div className="no-print mb-6 p-4 bg-gray-50 border rounded-lg flex items-center justify-between">
-        <span className="text-sm text-gray-600">
-          Form A Printable Document Preview (Optimized for A4 Print / PDF Export)
-        </span>
+    <div className="min-h-screen bg-white text-gray-900 font-serif p-4 sm:p-8 max-w-5xl mx-auto print:p-0 print:max-w-none text-xs">
+      {/* Print & Download Action Bar (Hidden when printing) */}
+      <div className="no-print mb-6 p-4 bg-slate-50 border border-slate-300 rounded-lg flex flex-wrap items-center justify-between gap-3 font-sans">
+        <div>
+          <span className="font-bold text-slate-800 block text-sm">
+            Form A Printable View (Word Template Faithful)
+          </span>
+          <span className="text-xs text-slate-600">
+            {data.isFinal ? (
+              <span className="text-green-700 font-semibold">Status: FINAL (All 3 Panel Members Submitted)</span>
+            ) : (
+              <span className="text-red-700 font-semibold">
+                Status: DRAFT (Pending: {data.unsubmittedList.join(', ') || 'panel assignment'})
+              </span>
+            )}
+            {' · '}
+            Canonical Hash: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">{shortHash}</code>
+          </span>
+        </div>
         <div className="flex items-center gap-3">
           <Link
             href={`/sec/${id}`}
-            className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border rounded hover:bg-gray-100"
+            className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-100"
           >
-            ← Back to Evaluation Form
+            ← Evaluation Form
           </Link>
-          <PrintButton label="Print Form A PDF" />
+          <a
+            href={`/sec/${id}/pdf`}
+            download
+            className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-800 rounded hover:bg-slate-900 shadow-sm"
+          >
+            Download Form A PDF
+          </a>
+          <PrintButton label="Print Form A" />
         </div>
       </div>
 
-      {/* Official Form Header */}
-      <div className="border-b-2 border-black pb-4 mb-6">
-        <div className="flex items-center justify-between gap-4">
+      {/* Watermark Notice for On-Screen Draft */}
+      {!data.isFinal && (
+        <div className="mb-4 p-3 bg-red-50 border-2 border-dashed border-red-400 text-red-800 text-center font-bold font-sans tracking-wide">
+          DRAFT - NOT FOR SIGNATURE
+          <div className="text-xs font-normal mt-0.5">
+            {data.unstartedList.length > 0 && `Unstarted Slots: ${data.unstartedList.join(', ')}. `}
+            {data.unsubmittedList.length > 0 && `Pending Submissions: ${data.unsubmittedList.join(', ')}.`}
+          </div>
+        </div>
+      )}
+
+      {/* Official Header */}
+      <div className="border-b-2 border-black pb-3 mb-4">
+        <div className="flex items-start justify-between gap-4">
           <Logo size="lg" className="h-14 w-auto" />
           <div className="text-right">
-            <h1 className="text-xl font-bold uppercase tracking-tight">Form A: SEC Assessment & Recommendation</h1>
-            <p className="text-xs text-gray-600 font-semibold mt-0.5">
-              Startup Evaluation Committee (SEC) — Innovation Fund
+            <h1 className="text-base font-bold uppercase tracking-tight text-black">
+              FORM A : SEC Startup Assessment and recommendation
+            </h1>
+            <p className="text-[11px] text-gray-700 italic mt-0.5">
+              (SEC members are requested to fill this form online, when all members have provided the data, the form will be printed for approval signatures)
             </p>
-            <p className="text-[11px] text-gray-500">IDEAPAD, ITM University Gwalior</p>
           </div>
         </div>
 
-        {/* Applicant Meta Box */}
-        <div className="mt-4 pt-3 border-t grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div>
-            <span className="text-gray-500 block">Startup / Project Name:</span>
-            <strong className="text-sm font-bold text-gray-900">{app.startup.teamName}</strong>
-          </div>
-          <div>
-            <span className="text-gray-500 block">Applicant (Team Leader):</span>
-            <strong className="text-gray-900">{app.startup.user?.name || 'N/A'}</strong>
-          </div>
-          <div>
-            <span className="text-gray-500 block">Enrollment No & Dept:</span>
-            <span className="text-gray-900 font-medium">
-              {app.startup.enrollmentNo} ({app.startup.program} {app.startup.department ? `· ${app.startup.department}` : ''})
-            </span>
-          </div>
-          <div>
-            <span className="text-gray-500 block">Assessment Date:</span>
-            <span className="text-gray-900 font-medium">
-              {formatISTDate(new Date())}
-            </span>
-          </div>
-        </div>
+        {/* Word Template Meta Table: 2 columns */}
+        <table className="w-full mt-3 border border-collapse border-black text-xs">
+          <tbody>
+            <tr>
+              <td className="border border-black p-1.5 font-bold w-1/3 bg-slate-50">
+                Name of applicant/team/startup
+              </td>
+              <td className="border border-black p-1.5 font-bold">
+                {data.startup.teamName}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-black p-1.5 font-bold bg-slate-50">
+                Assessment date
+              </td>
+              <td className="border border-black p-1.5">
+                {data.assessmentDateIST}
+                <span className="text-[11px] text-gray-600 ml-2">
+                  (Applicant: {data.startup.applicantName} · Enrollment: {data.startup.enrollmentNo} · {data.startup.programAndDept})
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      {/* 1. Status Assessment (TRL, MRL, IRL) */}
+      {/* SECTION 1: Current Status assessment based on idea pitch : */}
       <section className="mb-6">
-        <h2 className="text-sm font-bold uppercase border-b border-gray-400 pb-1 mb-2">
-          1. Current Status Assessment from Idea Pitch (TRL, MRL, IRL)
+        <h2 className="text-sm font-bold border-b border-black pb-1 mb-2">
+          1. Current Status assessment based on idea pitch :
         </h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs border border-collapse border-black">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="border border-black p-2 text-left">Readiness Scale</th>
-                {assessments.map((a, i) => (
-                  <th key={a.id} className="border border-black p-2 text-center">
-                    Member {i + 1}: {a.member.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border border-black p-2 font-semibold">Technology Readiness (TRL 1–9)</td>
-                {assessments.map((a) => {
-                  const trl = (a.statusForm as any)?.trl || '—';
-                  const desc = typeof trl === 'number' && trl > 0 ? LEVELS.TRL[trl - 1] : '';
-                  return (
-                    <td key={a.id} className="border border-black p-2 text-center">
-                      <strong>TRL {trl}</strong> {desc && <span className="block text-[10px] text-gray-600">{desc}</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr>
-                <td className="border border-black p-2 font-semibold">Manufacturing Readiness (MRL 1–9)</td>
-                {assessments.map((a) => {
-                  const mrl = (a.statusForm as any)?.mrl || '—';
-                  const desc = typeof mrl === 'number' && mrl > 0 ? LEVELS.MRL[mrl - 1] : '';
-                  return (
-                    <td key={a.id} className="border border-black p-2 text-center">
-                      <strong>MRL {mrl}</strong> {desc && <span className="block text-[10px] text-gray-600">{desc}</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr>
-                <td className="border border-black p-2 font-semibold">Integration Readiness (IRL 1–9)</td>
-                {assessments.map((a) => {
-                  const irl = (a.statusForm as any)?.irl || '—';
-                  const desc = typeof irl === 'number' && irl > 0 ? LEVELS.IRL[irl - 1] : '';
-                  return (
-                    <td key={a.id} className="border border-black p-2 text-center">
-                      <strong>IRL {irl}</strong> {desc && <span className="block text-[10px] text-gray-600">{desc}</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
+          {/* 3 scale blocks side by side: TRL, MRL, IRL */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-black">
+            {/* TRL Block */}
+            <div className="border-r border-black last:border-r-0">
+              <table className="w-full text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-black">
+                    <th className="border-r border-black p-1 text-left font-bold w-[40%]">TRL</th>
+                    <th className="border-r border-black p-1 text-center font-bold text-[10px]" colSpan={3}>
+                      SEC MEMBER NAME : 1.
+                      <div className="text-[9px] font-normal font-sans">
+                        1: {data.panelMembers[0].name.split(' ')[0]} | 2: {data.panelMembers[1].name.split(' ')[0]} | 3: {data.panelMembers[2].name.split(' ')[0]}
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.statusAssessment.trl.map((lvl) => (
+                    <tr key={lvl.level} className="border-b border-black last:border-b-0">
+                      <td className="border-r border-black p-1 text-[10px] leading-tight font-medium">
+                        {lvl.label}
+                      </td>
+                      {lvl.achieved.map((ach, mIdx) => (
+                        <td key={mIdx} className="border-r border-black last:border-r-0 p-1 text-center text-[10px] font-bold w-[20%]">
+                          {ach ? 'achieved' : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* MRL Block */}
+            <div className="border-r border-black last:border-r-0">
+              <table className="w-full text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-black">
+                    <th className="border-r border-black p-1 text-left font-bold w-[40%]">MRL</th>
+                    <th className="border-r border-black p-1 text-center font-bold text-[10px]" colSpan={3}>
+                      SEC MEMBER NAME : 2.
+                      <div className="text-[9px] font-normal font-sans">
+                        1: {data.panelMembers[0].name.split(' ')[0]} | 2: {data.panelMembers[1].name.split(' ')[0]} | 3: {data.panelMembers[2].name.split(' ')[0]}
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.statusAssessment.mrl.map((lvl) => (
+                    <tr key={lvl.level} className="border-b border-black last:border-b-0">
+                      <td className="border-r border-black p-1 text-[10px] leading-tight font-medium">
+                        {lvl.label}
+                      </td>
+                      {lvl.achieved.map((ach, mIdx) => (
+                        <td key={mIdx} className="border-r border-black last:border-r-0 p-1 text-center text-[10px] font-bold w-[20%]">
+                          {ach ? 'achieved' : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* IRL Block */}
+            <div>
+              <table className="w-full text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-black">
+                    <th className="border-r border-black p-1 text-left font-bold w-[40%]">IRL</th>
+                    <th className="border-r border-black p-1 text-center font-bold text-[10px]" colSpan={3}>
+                      SEC MEMBER NAME : 3.
+                      <div className="text-[9px] font-normal font-sans">
+                        1: {data.panelMembers[0].name.split(' ')[0]} | 2: {data.panelMembers[1].name.split(' ')[0]} | 3: {data.panelMembers[2].name.split(' ')[0]}
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.statusAssessment.irl.map((lvl) => (
+                    <tr key={lvl.level} className="border-b border-black last:border-b-0">
+                      <td className="border-r border-black p-1 text-[10px] leading-tight font-medium">
+                        {lvl.label}
+                      </td>
+                      {lvl.achieved.map((ach, mIdx) => (
+                        <td key={mIdx} className="border-r border-black last:border-r-0 p-1 text-center text-[10px] font-bold w-[20%]">
+                          {ach ? 'achieved' : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* 2. Milestone Assessment (Shared Form) */}
+      {/* SECTION 2: Milestone assessment : */}
       <section className="mb-6">
-        <h2 className="text-sm font-bold uppercase border-b border-gray-400 pb-1 mb-2">
-          2. Milestone Assessment (Shared Committee Assessment)
+        <h2 className="text-sm font-bold border-b border-black pb-1 mb-1">
+          2. Milestone assessment :
         </h2>
-        <div className="text-xs mb-2">
-          <strong>Milestone Track:</strong>{' '}
-          {app.milestone
-            ? TRACK_LABELS[app.milestone.track as 'PROTOTYPING' | 'PROFESSIONAL'] || app.milestone.track
-            : 'Pending'}
-        </div>
-        {app.milestone ? (
-          <table className="w-full text-xs border border-collapse border-black mb-3">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="border border-black p-1.5 text-center w-10">S.No</th>
-                <th className="border border-black p-1.5 text-left">Milestone Description</th>
-                <th className="border border-black p-1.5 text-center w-28">Status</th>
-                <th className="border border-black p-1.5 text-left">Remarks & Observations</th>
-              </tr>
-            </thead>
-            <tbody>
-              {app.milestone.items.map((item: any, i: number) => (
-                <tr key={item.id}>
-                  <td className="border border-black p-1.5 text-center">{i + 1}</td>
-                  <td className="border border-black p-1.5 font-medium">{item.name}</td>
-                  <td className="border border-black p-1.5 text-center font-bold">{item.state}</td>
-                  <td className="border border-black p-1.5 text-gray-700">
-                    {item.ownerRemark || '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-xs italic text-gray-500 mb-3">Shared milestones not yet completed.</p>
-        )}
+        <p className="text-[11px] font-bold text-gray-800 mb-2">
+          {data.milestoneAssessment.note}
+        </p>
 
-        {/* Edit & Correction Audit Trail (Policy requirement for signed corrections) */}
-        {editLogs.length > 0 && (
-          <div className="p-3 bg-gray-50 border border-black text-[11px] space-y-1">
-            <strong>Milestone Form Correction & Audit Log (Policy Signed Requirement):</strong>
-            <ul className="list-disc pl-5 text-gray-700">
-              {editLogs.map((log: any, idx: number) => (
-                <li key={idx}>
-                  {formatISTDateTime(log.at)}: Field {log.field} changed from "{log.oldValue || 'none'}" to "{log.newValue}"
+        <table className="w-full text-[11px] border border-collapse border-black mb-3">
+          <thead>
+            <tr className="bg-slate-100 border-b border-black">
+              <th className="border border-black p-1.5 text-left font-bold w-[26%]">
+                Milestones for Idea Prototyping and proof of concept
+              </th>
+              <th className="border border-black p-1.5 text-left font-bold w-[28%]">
+                Milestones for Professional Practice and Entrepreneurship Development
+              </th>
+              <th className="border border-black p-1.5 text-center font-bold w-[46%]" colSpan={3}>
+                Status (Completed/Pending) and remarks from SEC members
+              </th>
+            </tr>
+            <tr className="bg-slate-50 border-b border-black text-[10px]">
+              <th className="border border-black p-1"></th>
+              <th className="border border-black p-1"></th>
+              {data.panelMembers.map((pm, idx) => (
+                <th key={idx} className="border border-black p-1 text-center font-bold w-[15.3%]">
+                  {idx + 1}. {pm.name.split(' ')[0]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.milestoneAssessment.rows.map((row) => (
+              <tr key={row.rowNum} className="border-b border-black">
+                <td className="border border-black p-1.5 align-top font-medium leading-tight">
+                  {row.setAText}
+                </td>
+                <td className="border border-black p-1.5 align-top font-medium leading-tight">
+                  {row.setBText}
+                </td>
+                {row.memberRemarks.map((rem, mIdx) => (
+                  <td key={mIdx} className="border border-black p-1.5 align-top text-[10px] leading-tight">
+                    {rem}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Milestone Corrections Audit Table */}
+        {data.milestoneAssessment.corrections.length > 0 && (
+          <div className="p-2 border border-black bg-slate-50 text-[10px] mb-3">
+            <strong className="block mb-1 uppercase tracking-tight text-gray-800">
+              Milestone Corrections Audit Log (Policy Signed Requirement):
+            </strong>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {data.milestoneAssessment.corrections.map((c, i) => (
+                <li key={i}>
+                  {c.changedAtIST} by {c.changedByName}: Field <strong>{c.field}</strong> changed from "{c.oldValue}" to "{c.newValue}" | Signature: ______________________
                 </li>
               ))}
             </ul>
@@ -217,149 +302,235 @@ export default async function PrintableFormA({ params }: { params: { id: string 
         )}
       </section>
 
-      {/* 3. TRL 2/TRL 3 Experiment Assessment (12 Questions) */}
+      {/* SECTION 3: TRL 2/TRL3 Experiment Assessment (12 Questions) */}
       <section className="mb-6 page-break">
-        <h2 className="text-sm font-bold uppercase border-b border-gray-400 pb-1 mb-2">
-          3. TRL 2 / TRL 3 Experiment Assessment (12 Evaluation Questions)
+        <h2 className="text-sm font-bold border-b border-black pb-1 mb-1">
+          3. TRL 2/TRL3 Experiment Assessment
         </h2>
-        <table className="w-full text-xs border border-collapse border-black">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border border-black p-1.5 text-center w-10">#</th>
-              <th className="border border-black p-1.5 text-left">Evaluation Question</th>
-              {assessments.map((a, i) => (
-                <th key={a.id} className="border border-black p-1.5 text-center w-24">
-                  M{i + 1} Vote
+        <p className="text-[11px] text-gray-700 italic mb-2">
+          This assessment will be done by each SEC member
+        </p>
+
+        <table className="w-full text-[11px] border border-collapse border-black mb-2">
+          <thead>
+            <tr className="bg-slate-100 border-b border-black">
+              <th className="border border-black p-1.5 text-left font-bold w-[64%]">
+                Evaluation Question
+              </th>
+              {data.panelMembers.map((pm, i) => (
+                <th key={i} className="border border-black p-1.5 text-center font-bold w-[12%]">
+                  {i + 1}. {pm.name.split(' ')[0]}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {EXPERIMENT_QUESTIONS.map((q) => (
-              <tr key={q.id}>
-                <td className="border border-black p-1.5 text-center font-semibold">{q.num}</td>
-                <td className="border border-black p-1.5">
-                  <span className="text-[10px] text-gray-500 block uppercase font-bold">{q.category}</span>
+            {data.experimentAssessment.questions.map((q) => (
+              <tr key={q.id} className="border-b border-black">
+                <td className="border border-black p-1.5 leading-tight">
+                  <span className="font-bold mr-1">{q.num}.</span>
                   {q.text}
                 </td>
-                {assessments.map((a) => {
-                  const ans = (a.experimentForm as any)?.questions?.[q.id];
-                  const text = ans === true ? 'YES' : ans === false ? 'NO' : '—';
-                  const color = ans === true ? 'text-green-800' : ans === false ? 'text-red-800' : '';
-                  return (
-                    <td key={a.id} className={`border border-black p-1.5 text-center font-bold ${color}`}>
-                      {text}
-                    </td>
-                  );
-                })}
+                {q.votes.map((vote, mIdx) => (
+                  <td
+                    key={mIdx}
+                    className={`border border-black p-1.5 text-center font-bold ${
+                      vote === 'YES' ? 'text-green-800' : vote === 'NO' ? 'text-red-800' : 'text-gray-500'
+                    }`}
+                  >
+                    {vote}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {/* Total Votes Row */}
+            <tr className="bg-slate-100 font-bold border-t-2 border-black">
+              <td className="border border-black p-1.5">Total Votes (YES / NO)</td>
+              {data.experimentAssessment.memberVoteTotals.map((tot, mIdx) => (
+                <td key={mIdx} className="border border-black p-1.5 text-center font-bold">
+                  Y:{tot.yes} · N:{tot.no}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="text-[11px] font-bold text-gray-900 mb-3">
+          {data.experimentAssessment.decisionGuide}
+        </p>
+
+        {/* Member Notes Table */}
+        <div className="mt-3">
+          <p className="text-[11px] font-bold mb-1">
+            Notes from SEC members with reference to questions asked above number (to be used for final recommendation):
+          </p>
+          <table className="w-full text-[11px] border border-collapse border-black">
+            <thead>
+              <tr className="bg-slate-100 border-b border-black">
+                <th className="border border-black p-1.5 text-left font-bold w-[25%]">name of members</th>
+                <th className="border border-black p-1.5 text-left font-bold w-[75%]">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.panelMembers.map((pm, i) => (
+                <tr key={i} className="border-b border-black">
+                  <td className="border border-black p-1.5 font-bold align-top">
+                    member {i + 1} : {pm.name}
+                  </td>
+                  <td className="border border-black p-1.5 align-top whitespace-pre-wrap text-gray-800">
+                    {data.experimentAssessment.memberNotes[i].notes}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* SECTION 4: Recommendation Note from SEC members : */}
+      <section className="mb-6">
+        <h2 className="text-sm font-bold border-b border-black pb-1 mb-2">
+          4. Recommendation Note from SEC members :
+        </h2>
+        <table className="w-full text-[11px] border border-collapse border-black">
+          <thead>
+            <tr className="bg-slate-100 border-b border-black">
+              <th className="border border-black p-1.5 text-left font-bold w-[25%]">name of members</th>
+              <th className="border border-black p-1.5 text-left font-bold w-[75%]">recommendation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.panelMembers.map((pm, i) => (
+              <tr key={i} className="border-b border-black">
+                <td className="border border-black p-1.5 font-bold align-top">
+                  member {i + 1} : {pm.name}
+                </td>
+                <td className="border border-black p-1.5 align-top whitespace-pre-wrap text-gray-800">
+                  {data.recommendationNotes[i].recommendation}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        {/* Member Notes on Questions */}
-        <div className="mt-3 space-y-2">
-          {assessments.map((a, i) => (
-            <div key={a.id} className="p-2 border border-gray-300 text-xs bg-gray-50">
-              <strong>Member {i + 1} ({a.member.name}) Question Notes:</strong>
-              <p className="italic mt-0.5 whitespace-pre-wrap">
-                {(a.experimentForm as any)?.questionNotes || 'No specific question notes recorded.'}
-              </p>
-            </div>
-          ))}
-        </div>
       </section>
 
-      {/* 4. Recommendation Notes */}
+      {/* SECTION 5: Grant Evaluation by SEC member */}
       <section className="mb-6">
-        <h2 className="text-sm font-bold uppercase border-b border-gray-400 pb-1 mb-2">
-          4. Member Recommendation Notes
+        <h2 className="text-sm font-bold border-b border-black pb-1 mb-2">
+          5: Grant Evaluation by SEC member
         </h2>
-        <div className="space-y-2 text-xs">
-          {assessments.map((a, i) => (
-            <div key={a.id} className="p-3 border border-black bg-white space-y-1">
-              <strong>
-                Member {i + 1}: {a.member.name} ({a.member.designation || 'Panelist'})
-              </strong>
-              <p className="whitespace-pre-wrap text-gray-800">
-                {(a.experimentForm as any)?.recommendationNote || 'No recommendation note entered.'}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 5. Grant Evaluation & 6. Suggested Budgets under 9 Headers */}
-      <section className="mb-6">
-        <h2 className="text-sm font-bold uppercase border-b border-gray-400 pb-1 mb-2">
-          5 & 6. Grant Category Evaluation & Suggested Budget Moderation
-        </h2>
-        <table className="w-full text-xs border border-collapse border-black">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="border border-black p-2 text-left">Grant Header / Evaluation</th>
-              {assessments.map((a, i) => (
-                <th key={a.id} className="border border-black p-2 text-center">
-                  Member {i + 1}: {a.member.name}
+        <table className="w-full text-[11px] border border-collapse border-black">
+          <thead>
+            <tr className="bg-slate-100 border-b border-black">
+              <th className="border border-black p-1.5 text-left font-bold w-[55%]">Type of grant</th>
+              {data.panelMembers.map((pm, i) => (
+                <th key={i} className="border border-black p-1.5 text-center font-bold w-[15%]">
+                  Member name: {i + 1}.
+                  <div className="text-[9px] font-normal">{pm.name.split(' ')[0]}</div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            <tr className="bg-gray-50 font-bold">
-              <td className="border border-black p-2">Recommended Grant Category</td>
-              {assessments.map((a) => (
-                <td key={a.id} className="border border-black p-2 text-center text-brand-primary">
-                  {(a.experimentForm as any)?.grantEvaluation || 'Pending'}
-                </td>
-              ))}
-            </tr>
-            {BUDGET_HEADERS.map((h, idx) => (
-              <tr key={h.key}>
-                <td className="border border-black p-1.5 font-medium">
-                  {idx + 1}. {h.name}
-                </td>
-                {assessments.map((a) => {
-                  const val = (a.experimentForm as any)?.suggestedAmounts?.[h.key] ?? 0;
-                  return (
-                    <td key={a.id} className="border border-black p-1.5 text-right font-mono">
-                      ₹{Number(val).toLocaleString('en-IN')}
-                    </td>
-                  );
-                })}
+            {data.grantEvaluation.rows.map((row) => (
+              <tr key={row.key} className="border-b border-black">
+                <td className="border border-black p-1.5 font-medium">{row.label}</td>
+                {row.approved.map((appr, mIdx) => (
+                  <td key={mIdx} className="border border-black p-1.5 text-center font-bold text-green-800">
+                    {appr}
+                  </td>
+                ))}
               </tr>
             ))}
-            <tr className="bg-gray-100 font-bold">
-              <td className="border border-black p-2">Suggested Total Amount (₹)</td>
-              {assessments.map((a) => {
-                const total = (a.experimentForm as any)?.suggestedTotal ?? 0;
-                return (
-                  <td key={a.id} className="border border-black p-2 text-right font-mono text-sm">
-                    ₹{Number(total).toLocaleString('en-IN')}
+          </tbody>
+        </table>
+      </section>
+
+      {/* SECTION 6: Grant suggested under various headers : */}
+      <section className="mb-6">
+        <h2 className="text-sm font-bold border-b border-black pb-1 mb-2">
+          6. Grant suggested under various headers :
+        </h2>
+        <table className="w-full text-[11px] border border-collapse border-black">
+          <thead>
+            <tr className="bg-slate-100 border-b border-black">
+              <th className="border border-black p-1.5 text-left font-bold w-[55%]" rowSpan={2}>
+                Grant approved for
+              </th>
+              <th className="border border-black p-1 text-center font-bold w-[45%]" colSpan={3}>
+                Amount
+              </th>
+            </tr>
+            <tr className="bg-slate-100 border-b border-black text-[10px]">
+              {data.panelMembers.map((pm, i) => (
+                <th key={i} className="border border-black p-1 text-center font-bold w-[15%]">
+                  member {i + 1}: {pm.name.split(' ')[0]}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.suggestedBudgets.headers.map((h) => (
+              <tr key={h.key} className="border-b border-black">
+                <td className="border border-black p-1.5 font-medium">{h.name}</td>
+                {h.amounts.map((amt, mIdx) => (
+                  <td key={mIdx} className="border border-black p-1.5 text-right font-mono">
+                    {amt}
                   </td>
-                );
-              })}
+                ))}
+              </tr>
+            ))}
+            <tr className="bg-slate-100 font-bold border-t-2 border-black">
+              <td className="border border-black p-1.5">total :</td>
+              {data.suggestedBudgets.totals.map((tot, mIdx) => (
+                <td key={mIdx} className="border border-black p-1.5 text-right font-mono text-xs">
+                  {tot}
+                </td>
+              ))}
             </tr>
           </tbody>
         </table>
       </section>
 
-      {/* 7. Assessed By (3 SEC Signatures with Names & Designations from Profiles) */}
-      <section className="mt-10 pt-4 border-t-2 border-black">
-        <h2 className="text-xs font-bold uppercase tracking-wider mb-6">
-          7. Assessed By — Startup Evaluation Committee (SEC Members):
-        </h2>
-        <div className="grid grid-cols-3 gap-6 text-center text-xs">
-          {secProfiles.map((sec) => (
-            <div key={sec.id} className="space-y-1">
-              <div className="h-14 border-b border-black mb-2" />
-              <strong className="block text-sm font-bold text-gray-900">{sec.name}</strong>
-              <span className="block text-gray-700">{sec.designation || 'SEC Panel Member'}</span>
-              <span className="block text-gray-500 text-[11px]">{sec.department || 'ITM University'}</span>
+      {/* SECTION 7: Assessed By: (3 Panel Members) */}
+      <section className="mt-8 pt-4 border-t-2 border-black">
+        <h2 className="text-sm font-bold uppercase mb-4">7. Assessed By:</h2>
+        <div className="grid grid-cols-3 gap-6">
+          {data.panelMembers.map((pm, i) => (
+            <div key={i} className="border border-black p-3 text-center">
+              <div className="h-10 border-b border-black mb-2 flex items-end justify-center">
+                <span className="text-[10px] text-gray-500 italic">Signature & Date</span>
+              </div>
+              <strong className="block text-xs font-bold text-black">{pm.name}</strong>
+              <span className="block text-[11px] text-gray-800">{pm.designation}</span>
+              <span className="block text-[10px] text-gray-600">{pm.department}</span>
             </div>
           ))}
         </div>
       </section>
+
+      {/* SECTION 8: Reviewed by: (Signatories from Settings: Head Incubation & Director IDEAPAD) */}
+      <section className="mt-6 pt-4 border-t border-black">
+        <h2 className="text-sm font-bold uppercase mb-4">Reviewed by:</h2>
+        <div className="grid grid-cols-2 gap-8">
+          {data.signatories.reviewedBy.map((sig) => (
+            <div key={sig.key} className="border border-black p-3 text-center">
+              <div className="h-10 border-b border-black mb-2 flex items-end justify-center">
+                <span className="text-[10px] text-gray-500 italic">Signature & Date</span>
+              </div>
+              <strong className="block text-xs font-bold text-black">{sig.name}</strong>
+              <span className="block text-[11px] text-gray-800">{sig.designation}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Running Footer (Visible in print on each page) */}
+      <div className="mt-8 pt-3 border-t border-black flex items-center justify-between text-[10px] text-gray-600 font-sans">
+        <span>Form A: SEC Startup Assessment · App ID: {data.applicationId}</span>
+        <span>Generated: {data.generatedAtIST}</span>
+        <span>Canonical Hash: <code className="font-mono">{shortHash}</code></span>
+      </div>
     </div>
   );
 }

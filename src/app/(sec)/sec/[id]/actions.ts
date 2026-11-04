@@ -2,6 +2,8 @@
 
 import { getSession } from '@/lib/auth';
 import {
+  startAssessment,
+  updateSecProfile,
   saveAssessment,
   claimMilestone,
   setMilestoneState,
@@ -12,6 +14,51 @@ import {
 } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+
+export async function startAssessmentAction(applicationId: string) {
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized: SEC Member session required.' };
+    }
+
+    const result = await startAssessment(
+      { userId: session.userId, role: session.role },
+      applicationId
+    );
+
+    revalidatePath('/sec');
+    revalidatePath(`/sec/${applicationId}`);
+    return { success: true, position: result.position };
+  } catch (err: any) {
+    console.error('startAssessmentAction error:', err);
+    let msg = err.message || 'Failed to start assessment.';
+    if (msg.includes('The panel for this application is complete')) {
+      msg = 'The panel for this application is complete';
+    }
+    return { success: false, error: msg };
+  }
+}
+
+export async function updateSecProfileAction(data: { name: string; designation: string; department?: string }) {
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'SEC_MEMBER') {
+      return { success: false, error: 'Unauthorized: SEC Member session required.' };
+    }
+
+    await updateSecProfile(
+      { userId: session.userId, role: session.role },
+      data
+    );
+
+    revalidatePath('/sec');
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateSecProfileAction error:', err);
+    return { success: false, error: err.message || 'Failed to update profile' };
+  }
+}
 
 export async function saveAssessmentDraftAction(
   applicationId: string,

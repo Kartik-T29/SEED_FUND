@@ -32,6 +32,7 @@ import {
   Save,
   Send,
   Printer,
+  Download,
   Sparkles,
   Info,
   Clock,
@@ -395,12 +396,17 @@ export default function SecEvaluationForm({
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/sec/${application.id}/print`} target="_blank">
-            <Button variant="outline" size="sm" className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
               <Printer className="w-4 h-4" /> Printable Form A
             </Button>
           </Link>
+          <Link href={`/sec/${application.id}/pdf`} target="_blank">
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
+              <Download className="w-4 h-4" /> Form A PDF
+            </Button>
+          </Link>
           <Link href="/sec">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="text-xs">
               Dashboard
             </Button>
           </Link>
