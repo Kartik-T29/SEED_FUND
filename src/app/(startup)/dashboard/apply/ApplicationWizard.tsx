@@ -61,7 +61,6 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
   const registeredName = (registeredUser.name || '').trim();
   const isReadOnly = application.status !== 'DRAFT';
 
-  const [step, setStep] = useState<number>(1);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -77,6 +76,40 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
     }
     return data;
   }, [application.formData, registeredName]);
+
+  const initialStep = useMemo(() => {
+    if (isReadOnly) return 1;
+    const hasAgreement = Boolean(
+      initialFormData.agreement?.version === AGREEMENT_VERSION &&
+      initialFormData.agreement?.acceptedByName
+    );
+    if (!hasAgreement) return 1;
+
+    if (
+      !(initialFormData.problemStatement || '').trim() ||
+      !(initialFormData.proposedSolution || '').trim() ||
+      !(initialFormData.effortAndTraction || '').trim()
+    ) {
+      return 2;
+    }
+
+    const exp = initialFormData.experiment || {};
+    if (
+      !(exp.objective || '').trim() ||
+      !(exp.methodology || '').trim() ||
+      !(exp.deliverables || '').trim()
+    ) {
+      return 3;
+    }
+
+    if ((application.budgetItems || []).length === 0) {
+      return 4;
+    }
+
+    return 2;
+  }, [isReadOnly, initialFormData, application.budgetItems]);
+
+  const [step, setStep] = useState<number>(initialStep);
   const [formData, setFormData] = useState<any>(initialFormData);
   const [grantType, setGrantType] = useState<string>(application.grantType || 'IDEATION');
   const [budgetItems, setBudgetItems] = useState<any[]>(application.budgetItems || []);
@@ -90,8 +123,8 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
     initialFormData.agreement?.acceptedByName || ''
   );
   const isAgreementAccepted = Boolean(
-    initialFormData.agreement?.version === AGREEMENT_VERSION &&
-    initialFormData.agreement?.acceptedByName
+    formData.agreement?.version === AGREEMENT_VERSION &&
+    formData.agreement?.acceptedByName
   );
   const [showAgreementModal, setShowAgreementModal] = useState(false);
 
@@ -123,17 +156,21 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
 
   // Check agreement scroll container on mount
   useEffect(() => {
+    if (isAgreementAccepted) {
+      setHasScrolledToBottom(true);
+      return;
+    }
     const el = agreementContainerRef.current;
     if (el) {
-      if (el.scrollHeight <= el.clientHeight + 15) {
+      if (el.scrollHeight <= el.clientHeight + 50) {
         setHasScrolledToBottom(true);
       }
     }
-  }, [step]);
+  }, [step, isAgreementAccepted]);
 
   const handleAgreementScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 25) {
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 50) {
       setHasScrolledToBottom(true);
     }
   };
@@ -302,7 +339,8 @@ export default function ApplicationWizard({ application }: ApplicationWizardProp
       const res = await acceptAgreementAction(application.id, typedAgreementName);
       if (res.success && res.agreement) {
         setFormData((prev: any) => ({ ...prev, agreement: res.agreement }));
-        goToStep(2);
+        setStep(2);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to accept agreement');

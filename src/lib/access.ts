@@ -208,7 +208,12 @@ export async function saveDraft(
   return prisma.$transaction(async (tx) => {
     let updateData: Prisma.ApplicationUpdateInput = {};
     if (payload.formData !== undefined) {
-      updateData.formData = payload.formData;
+      const existingFormData = (app.formData as any) || {};
+      const newFormData = { ...payload.formData };
+      if (existingFormData.agreement && !newFormData.agreement) {
+        newFormData.agreement = existingFormData.agreement;
+      }
+      updateData.formData = newFormData;
     }
     if (payload.grantType !== undefined) {
       updateData.grantType = payload.grantType === "" ? null : payload.grantType;
