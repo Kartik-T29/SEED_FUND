@@ -14,7 +14,7 @@ interface DownloadApplicationButtonProps {
     dataHash?: string;
   }>;
   className?: string;
-  size?: 'sm' | 'default';
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export default function DownloadApplicationButton({
@@ -23,7 +23,7 @@ export default function DownloadApplicationButton({
   submittedAtIST,
   availableVersions = [],
   className = '',
-  size = 'default',
+  size = 'md',
 }: DownloadApplicationButtonProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<number>(version);

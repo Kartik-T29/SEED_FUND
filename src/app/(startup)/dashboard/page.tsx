@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Lock, FileText, Activity, PlusCircle, ExternalLink, ArrowRight } from 'lucide-react';
 import { listApplications, isStatusUnlocked } from '@/lib/access';
+import { prisma } from '@/lib/prisma';
+import DownloadApplicationButton from '@/components/application/DownloadApplicationButton';
 import { formatDate } from '@/lib/utils';
 
 export default async function StartupDashboard() {
@@ -19,6 +21,12 @@ export default async function StartupDashboard() {
 
   const openDraft = applications.find((app: any) => app.status === 'DRAFT');
   const unlocked = await isStatusUnlocked(session.userId);
+
+  const snapshots = await prisma.applicationSnapshot.findMany({
+    where: { applicationId: { in: applications.map((a: any) => a.id) } },
+    select: { id: true, applicationId: true, version: true, createdAt: true, dataHash: true },
+    orderBy: { version: 'desc' },
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -187,11 +195,34 @@ export default async function StartupDashboard() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-end sm:self-center">
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 self-end sm:self-center">
+                      {!isDraft && (
+                        <DownloadApplicationButton
+                          isSubmitted={true}
+                          version={app.version}
+                          submittedAtIST={
+                            app.submittedAt
+                              ? new Date(app.submittedAt).toLocaleString('en-IN', {
+                                  timeZone: 'Asia/Kolkata',
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                }) + ' IST'
+                              : undefined
+                          }
+                          availableVersions={snapshots.filter((s) => s.applicationId === app.id)}
+                          size="sm"
+                        />
+                      )}
                       {isDraft ? (
-                        <Link href={`/dashboard/apply?id=${app.id}`}>
-                          <Button size="sm">Continue Draft</Button>
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <DownloadApplicationButton
+                            isSubmitted={false}
+                            size="sm"
+                          />
+                          <Link href={`/dashboard/apply?id=${app.id}`}>
+                            <Button size="sm">Continue Draft</Button>
+                          </Link>
+                        </div>
                       ) : (
                         <>
                           <Link href={`/dashboard/apply?id=${app.id}`}>

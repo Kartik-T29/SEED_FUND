@@ -6,6 +6,8 @@ import { Timeline } from '@/components/ui/timeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { startupStatusView, isStatusUnlocked, listApplications } from '@/lib/access';
+import { prisma } from '@/lib/prisma';
+import DownloadApplicationButton from '@/components/application/DownloadApplicationButton';
 import { ArrowLeft, FileText } from 'lucide-react';
 
 export default async function StatusPage({
@@ -49,6 +51,20 @@ export default async function StatusPage({
     : submittedApps[0];
 
   const statusView = await startupStatusView({ userId: session.userId, role: session.role }, currentApp.id);
+
+  const snapshots = await prisma.applicationSnapshot.findMany({
+    where: { applicationId: currentApp.id },
+    select: { version: true, createdAt: true, dataHash: true },
+    orderBy: { version: 'desc' },
+  });
+
+  const submittedAtIST = currentApp.submittedAt
+    ? new Date(currentApp.submittedAt).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }) + ' IST'
+    : undefined;
 
   const items = [
     {
@@ -128,31 +144,46 @@ export default async function StatusPage({
         </div>
       )}
 
-      {/* Active Application Info */}
-      <div className="mb-6 flex items-center gap-3">
-        <Badge
-          variant={
-            statusView.status === 'SUBMITTED'
-              ? 'warning'
-              : statusView.status === 'IN_REVIEW'
-              ? 'info'
-              : statusView.status === 'APPROVED'
-              ? 'success'
-              : statusView.status === 'REJECTED'
-              ? 'danger'
-              : 'default'
-          }
-        >
-          {statusView.status}
-        </Badge>
-        <span className="text-sm text-gray-500">
-          ID: <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{currentApp.id}</code>
-        </span>
-        {currentApp.grantType && (
-          <span className="text-sm font-medium text-gray-700">
-            • {currentApp.grantType} Grant (v{currentApp.version})
-          </span>
-        )}
+      {/* Active Application Info and Download */}
+      <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Badge
+              variant={
+                statusView.status === 'SUBMITTED'
+                  ? 'warning'
+                  : statusView.status === 'IN_REVIEW'
+                  ? 'info'
+                  : statusView.status === 'APPROVED'
+                  ? 'success'
+                  : statusView.status === 'REJECTED'
+                  ? 'danger'
+                  : 'default'
+              }
+            >
+              {statusView.status}
+            </Badge>
+            <span className="text-sm text-gray-500">
+              ID: <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{currentApp.id}</code>
+            </span>
+            {currentApp.grantType && (
+              <span className="text-sm font-medium text-gray-700">
+                • {currentApp.grantType} Grant (v{currentApp.version})
+              </span>
+            )}
+          </div>
+          {submittedAtIST && (
+            <p className="text-xs text-gray-500">Submitted on {submittedAtIST}</p>
+          )}
+        </div>
+
+        <DownloadApplicationButton
+          isSubmitted={currentApp.status !== 'DRAFT'}
+          version={currentApp.version}
+          submittedAtIST={submittedAtIST}
+          availableVersions={snapshots}
+          size="sm"
+        />
       </div>
 
       <Card>

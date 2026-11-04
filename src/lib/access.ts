@@ -644,45 +644,90 @@ export async function getStartupSubmissionForDownload(
     throw new Forbidden("DRAFT_NOT_DOWNLOADABLE");
   }
 
+  // Collect all application IDs in the lineage (via supersedesId)
+  const lineageAppIds = new Set<string>([app.id]);
+  let parentId = app.supersedesId;
+  while (parentId) {
+    lineageAppIds.add(parentId);
+    const parent = await prisma.application.findUnique({
+      where: { id: parentId },
+      select: { supersedesId: true },
+    });
+    parentId = parent?.supersedesId || null;
+  }
+  let child = await prisma.application.findUnique({
+    where: { supersedesId: app.id },
+    select: { id: true },
+  });
+  while (child) {
+    lineageAppIds.add(child.id);
+    child = await prisma.application.findUnique({
+      where: { supersedesId: child.id },
+      select: { id: true },
+    });
+  }
+
+  const appIdsArray = Array.from(lineageAppIds);
+
+  // Get all snapshot versions for this application lineage (for the versions list)
+  let allSnapshots = await prisma.applicationSnapshot.findMany({
+    where: { applicationId: { in: appIdsArray } },
+    orderBy: { version: "desc" },
+    select: { version: true, dataHash: true, createdAt: true, reconstructed: true, applicationId: true },
+  });
+
   const requestedVersion = options?.version || app.version || 1;
 
-  // Get all snapshot versions for this application (for the versions list)
-  const allSnapshots = await prisma.applicationSnapshot.findMany({
-    where: { applicationId: app.id },
-    orderBy: { version: "desc" },
-    select: { version: true, dataHash: true, createdAt: true, reconstructed: true },
-  });
+  let snapshot = allSnapshots.find((s) => s.version === requestedVersion);
 
-  let snapshot = await prisma.applicationSnapshot.findUnique({
-    where: {
-      applicationId_version: {
-        applicationId: app.id,
-        version: requestedVersion,
-      },
-    },
-  });
+  // If the snapshot exists in allSnapshots, fetch the full snapshot object (with data)
+  let fullSnapshot = snapshot
+    ? await prisma.applicationSnapshot.findFirst({
+        where: { applicationId: { in: appIdsArray }, version: requestedVersion },
+      })
+    : null;
 
-  // Backward compatibility: if no snapshot exists yet for this submitted application, reconstruct it
-  if (!snapshot) {
-    const canonicalData = buildApplicationData(app);
+  // Backward compatibility: if no snapshot exists yet for this submitted version, reconstruct it
+  if (!fullSnapshot) {
+    // Find the application row corresponding to this version in the lineage
+    const targetApp =
+      (await prisma.application.findFirst({
+        where: { id: { in: appIdsArray }, version: requestedVersion },
+        include: {
+          startup: { include: { user: true } },
+          budgetItems: true,
+          documents: true,
+        },
+      })) || app;
+
+    const canonicalData = buildApplicationData(targetApp);
     const { fullHash } = canonicalizeApplicationData(canonicalData);
-    snapshot = await prisma.applicationSnapshot.create({
+    fullSnapshot = await prisma.applicationSnapshot.create({
       data: {
-        applicationId: app.id,
+        applicationId: targetApp.id,
         version: requestedVersion,
         data: canonicalData as any,
         dataHash: fullHash,
         reconstructed: true,
       },
     });
+
+    allSnapshots = await prisma.applicationSnapshot.findMany({
+      where: { applicationId: { in: appIdsArray } },
+      orderBy: { version: "desc" },
+      select: { version: true, dataHash: true, createdAt: true, reconstructed: true, applicationId: true },
+    });
   }
 
   return {
     application: app,
-    snapshot,
-    availableVersions: allSnapshots.length > 0
-      ? allSnapshots
-      : [{ version: snapshot.version, dataHash: snapshot.dataHash, createdAt: snapshot.createdAt, reconstructed: snapshot.reconstructed }],
+    snapshot: fullSnapshot,
+    availableVersions: allSnapshots.map((s) => ({
+      version: s.version,
+      dataHash: s.dataHash,
+      createdAt: s.createdAt,
+      reconstructed: s.reconstructed,
+    })),
   };
 }
 
