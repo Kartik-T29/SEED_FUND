@@ -9,7 +9,7 @@ import {
   POLICY_TERMS_AND_CONDITIONS,
   GRANT_RANGES,
 } from './seedfund-constants';
-import { formatIndianCurrency } from './form-a-data';
+import { formatIndianCurrency, deterministicStringify } from './form-a-data';
 
 export interface FormBData {
   applicationId: string;
@@ -108,8 +108,8 @@ export async function buildFormBData(applicationId: string, s: Session): Promise
 
   // Build 9 headers
   let totalRaw = 0;
-  const headers = BUDGET_HEADERS.map((h) => {
-    const val = Number(rawAmounts[h.key]) || 0;
+  const headers = BUDGET_HEADERS.map((h, idx) => {
+    const val = Number(rawAmounts[h.key]) || Number(rawAmounts[String(idx + 1)]) || 0;
     totalRaw += val;
     return {
       key: h.key,
@@ -118,6 +118,10 @@ export async function buildFormBData(applicationId: string, s: Session): Promise
       amountRaw: val,
     };
   });
+
+  if (totalRaw === 0 && evaluation?.approvedTotal) {
+    totalRaw = Number(evaluation.approvedTotal);
+  }
 
   // Range validation note ONLY if total is outside tier range
   let rangeNotice: string | null = null;
@@ -220,7 +224,7 @@ export function canonicalizeFormBData(data: FormBData): {
   fullHash: string;
   shortHash: string;
 } {
-  const canonicalJson = JSON.stringify(data, Object.keys(data).sort());
+  const canonicalJson = deterministicStringify(data);
   const fullHash = crypto.createHash('sha256').update(canonicalJson).digest('hex');
   const shortHash = fullHash.substring(0, 12);
   return { canonicalJson, fullHash, shortHash };

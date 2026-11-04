@@ -12,6 +12,7 @@ import {
 } from '../src/lib/auth-actions';
 import {
   listApplications,
+  startAssessment,
   listPendingSecMembers,
   adminApproveSecUser,
   adminRejectSecUser,
@@ -386,7 +387,11 @@ async function runAllTests() {
   }
   pass('SEC evaluator sees submitted application', `Application ID: ${targetSecApp.id} for team ${targetSecApp.startup.teamName}`);
 
-  // 5b. SEC Evaluator submits Form 1 (Status Form) & Form 3 (Experiment Form)
+  // 5b. SEC Evaluator starts assessment (claims Panel Position 1)
+  const startResult = await startAssessment(secSession as any, draftApp.id);
+  pass('SEC Evaluator started assessment', `Claimed Panel Position ${startResult.position} (Milestone Lead)`);
+
+  // SEC Evaluator submits Form 1 (Status Form) & Form 3 (Experiment Form)
   await saveAssessment(
     secSession as any,
     draftApp.id,
@@ -476,7 +481,17 @@ async function runAllTests() {
     },
   });
 
-  for (const otherSec of otherSecMembers) {
+  // Form B requires exactly 3 panel members to start & submit.
+  // Take 2 additional approved SEC members to complete the 3-person panel.
+  const panelTwoAndThree = otherSecMembers.slice(0, 2);
+  for (const otherSec of panelTwoAndThree) {
+    const existingPanel = await prisma.applicationPanelMember.findUnique({
+      where: { applicationId_memberId: { applicationId: draftApp.id, memberId: otherSec.id } },
+    });
+    if (!existingPanel) {
+      await startAssessment({ userId: otherSec.id, role: otherSec.role } as any, draftApp.id);
+    }
+
     const existing = await prisma.assessment.findUnique({
       where: { applicationId_memberId: { applicationId: draftApp.id, memberId: otherSec.id } },
     });
@@ -490,7 +505,7 @@ async function runAllTests() {
         },
         true
       );
-      pass(`Approved seeded SEC member assessed (${otherSec.email})`, 'Completed committee quorum requirement');
+      pass(`Approved seeded SEC member assessed (${otherSec.email})`, 'Completed committee panel slot and evaluation');
     }
   }
 

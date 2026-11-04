@@ -2,8 +2,8 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 import { CanonicalApplicationData } from './application-data';
-import { FormAData } from './form-a-data';
-import { FormBData } from './form-b-data';
+import { FormAData, canonicalizeFormAData } from './form-a-data';
+import { FormBData, canonicalizeFormBData } from './form-b-data';
 import { formatISTDateTime } from './dates';
 
 /**
@@ -97,7 +97,7 @@ function renderDraftWatermark(doc: PDFKit.PDFDocument, width: number, height: nu
 // ─────────────────────────────────────────────────────────────
 export async function generateFormAPdf(
   data: FormAData,
-  dataHash: string
+  dataHash?: string
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -622,7 +622,7 @@ export async function generateFormAPdf(
       // Footers
       const range = doc.bufferedPageRange();
       const generatedAtIST = data.generatedAtIST;
-      const shortHash = dataHash.substring(0, 12);
+      const shortHash = (dataHash || canonicalizeFormAData(data).shortHash).substring(0, 12);
 
       for (let i = range.start; i < range.start + range.count; i++) {
         doc.switchToPage(i);
@@ -669,7 +669,7 @@ export async function generateFormAPdf(
 // ─────────────────────────────────────────────────────────────
 export async function generateFormBPdf(
   data: FormBData,
-  dataHash: string
+  dataHash?: string
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -906,7 +906,7 @@ export async function generateFormBPdf(
       // Footers
       const range = doc.bufferedPageRange();
       const generatedAtIST = data.generatedAtIST;
-      const shortHash = dataHash.substring(0, 12);
+      const shortHash = (dataHash || canonicalizeFormBData(data).shortHash).substring(0, 12);
 
       for (let i = range.start; i < range.start + range.count; i++) {
         doc.switchToPage(i);

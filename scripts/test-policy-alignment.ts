@@ -18,6 +18,7 @@ import {
   setMilestoneState,
   addMilestoneRemark,
   submitMilestone,
+  startAssessment,
   saveAssessment,
   listApplications,
 } from '../src/lib/access';
@@ -330,6 +331,9 @@ async function runPolicyAlignmentTests() {
     twelveQuestionsObj[`q${i}`] = 'YES';
   }
 
+  // Start assessment and claim Panel Position 1
+  await startAssessment(secSession1, draftApp.id);
+
   // Save individual assessment Form A
   await saveAssessment(
     secSession1,
@@ -380,14 +384,15 @@ async function runPolicyAlignmentTests() {
   await submitMilestone(secSession1, draftApp.id);
   pass('Milestone assessment finalized', 'Items set to COMPLETED and locked');
 
-  // Submit evaluations for ALL OTHER active approved SEC members in the database to satisfy quorum
+  // Submit evaluations for 2 additional SEC members to complete the 3-member panel
   const activeSecUsers = await prisma.user.findMany({
     where: { role: 'SEC_MEMBER', approvalStatus: 'APPROVED', active: true },
   });
-  const otherSecUsers = activeSecUsers.filter((u) => u.id !== secUser1!.id);
+  const otherSecUsers = activeSecUsers.filter((u) => u.id !== secUser1!.id).slice(0, 2);
 
   for (const user of otherSecUsers) {
     const s = { userId: user.id, role: 'SEC_MEMBER' } as any;
+    await startAssessment(s, draftApp.id);
     await saveAssessment(
       s,
       draftApp.id,
@@ -403,7 +408,7 @@ async function runPolicyAlignmentTests() {
       true
     );
   }
-  pass('All active SEC members submitted evaluations', `Quorum complete (${activeSecUsers.length}/${activeSecUsers.length} submitted assessments)`);
+  pass('All 3 panel SEC members submitted evaluations', 'Quorum complete (3/3 submitted assessments)');
 
   // =========================================================================
   // 6. ADMIN FORM B SANCTION WORKFLOW

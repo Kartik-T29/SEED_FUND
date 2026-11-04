@@ -47,6 +47,7 @@ export interface FormAData {
   draftWatermark: string | null;
   unstartedList: string[];
   unsubmittedList: string[];
+  draftNotes: string[];
 
   startup: {
     teamName: string;
@@ -309,6 +310,11 @@ export async function buildFormAData(applicationId: string, s: Session): Promise
     panelRecords.length === 3 &&
     panelMembers.every((m) => m.isSubmitted);
 
+  const draftNotes = [
+    ...unstartedList.map((u) => `${u}: Not yet started`),
+    ...unsubmittedList.map((u) => `${u}: Assessment pending submission`),
+  ];
+
   const draftWatermark = isFinal ? null : 'DRAFT - NOT FOR SIGNATURE';
 
   // 1. Status Assessment (TRL, MRL, IRL)
@@ -569,6 +575,7 @@ export async function buildFormAData(applicationId: string, s: Session): Promise
     draftWatermark,
     unstartedList,
     unsubmittedList,
+    draftNotes,
     startup: {
       teamName: app.startup.teamName,
       applicantName: app.startup.user?.name || 'Not provided',
@@ -607,6 +614,17 @@ export async function buildFormAData(applicationId: string, s: Session): Promise
   };
 }
 
+export function deterministicStringify(obj: any): string {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(deterministicStringify).join(',') + ']';
+  }
+  const keys = Object.keys(obj).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + deterministicStringify(obj[k])).join(',') + '}';
+}
+
 /**
  * Deterministic SHA-256 canonicalization for Form A.
  */
@@ -615,7 +633,7 @@ export function canonicalizeFormAData(data: FormAData): {
   fullHash: string;
   shortHash: string;
 } {
-  const canonicalJson = JSON.stringify(data, Object.keys(data).sort());
+  const canonicalJson = deterministicStringify(data);
   const fullHash = crypto.createHash('sha256').update(canonicalJson).digest('hex');
   const shortHash = fullHash.substring(0, 12);
   return { canonicalJson, fullHash, shortHash };

@@ -969,7 +969,7 @@ export async function startAssessment(s: Session, applicationId: string) {
       await tx.auditLog.create({
         data: {
           actorId: s.userId,
-          action: `START_ASSESSMENT_SLOT_${nextPosition}`,
+          action: "START_ASSESSMENT",
           entity: "Application",
           entityId: applicationId,
           details: JSON.stringify({
