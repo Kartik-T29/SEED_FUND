@@ -73,7 +73,7 @@ export async function middleware(request: NextRequest) {
     const hasAccess = allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
 
     // Allow API routes for authenticated users (specific checks happen in the route handlers)
-    if (pathname.startsWith('/api/')) {
+    if (pathname.startsWith('/api/') || pathname.startsWith('/dashboard/application/download')) {
       return NextResponse.next();
     }
 

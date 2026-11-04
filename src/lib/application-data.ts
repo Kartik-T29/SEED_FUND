@@ -183,23 +183,23 @@ export function buildApplicationData(app: any): CanonicalApplicationData {
 
   // 3. Concept
   const concept = {
-    problemStatement: String(formData.problemStatement || ''),
-    proposedSolution: String(formData.proposedSolution || ''),
-    effortAndTraction: String(formData.effortAndTraction || ''),
+    problemStatement: String(formData.problemStatement || formData.problem || ''),
+    proposedSolution: String(formData.proposedSolution || formData.solution || ''),
+    effortAndTraction: String(formData.effortAndTraction || formData.traction || ''),
     hasReceivedGrantBefore: Boolean(formData.hasReceivedGrantBefore),
   };
 
   // 4. Experiment (10 Headings)
-  const exp = formData.experiment || {};
+  const exp = formData.experiment || formData.experiments || {};
   const experiment = {
-    objective: String(exp.objective || ''),
-    problemStatement: String(exp.problemStatement || ''),
-    expectedOutcome: String(exp.expectedOutcome || ''),
+    objective: String(exp.objective || exp.hypothesis || ''),
+    problemStatement: String(exp.problemStatement || exp.problem || ''),
+    expectedOutcome: String(exp.expectedOutcome || exp.outcome || ''),
     methodology: String(exp.methodology || ''),
-    experimentalSetup: String(exp.experimentalSetup || ''),
-    dataToBeCollected: String(exp.dataToBeCollected || ''),
-    validationCriteria: String(exp.validationCriteria || ''),
-    risksAndAssumptions: String(exp.risksAndAssumptions || ''),
+    experimentalSetup: String(exp.experimentalSetup || exp.setup || ''),
+    dataToBeCollected: String(exp.dataToBeCollected || exp.data || ''),
+    validationCriteria: String(exp.validationCriteria || exp.criteria || ''),
+    risksAndAssumptions: String(exp.risksAndAssumptions || exp.risks || ''),
     timeline: String(exp.timeline || ''),
     deliverables: String(exp.deliverables || ''),
   };

@@ -45,8 +45,8 @@ export async function generateApplicationPdf(
         doc.registerFont('DevanagariBold', boldFontPath);
       }
 
-      const fontRegular = fs.existsSync(regularFontPath) ? 'Devanagari' : 'Helvetica';
-      const fontBold = fs.existsSync(boldFontPath) ? 'DevanagariBold' : 'Helvetica-Bold';
+      const fontRegular = 'Helvetica';
+      const fontBold = 'Helvetica-Bold';
 
       const logoPath = path.join(process.cwd(), 'public', 'brand', 'logo.png');
       const contentWidth = 515; // 595 - 40 * 2
@@ -59,6 +59,38 @@ export async function generateApplicationPdf(
         }
       };
 
+      // Helper: Writes text with proper font selection (Devanagari for Hindi, Helvetica for Latin/English)
+      const writeText = (
+        text: string,
+        options: PDFKit.Mixins.TextOptions = {},
+        isBold = false
+      ) => {
+        if (!text) return;
+        const str = String(text);
+        if (!/[\u0900-\u097F\uA8E0-\uA8FF]/.test(str)) {
+          doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica');
+          doc.text(str, options);
+          return;
+        }
+
+        // Split contiguous chunks of Devanagari vs Non-Devanagari
+        const regex = /([\u0900-\u097F\uA8E0-\uA8FF]+|[^\u0900-\u097F\uA8E0-\uA8FF]+)/g;
+        const parts = str.match(regex) || [str];
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          const isDevanagari = /[\u0900-\u097F\uA8E0-\uA8FF]/.test(part);
+          const font = isDevanagari
+            ? (isBold ? 'DevanagariBold' : 'Devanagari')
+            : (isBold ? 'Helvetica-Bold' : 'Helvetica');
+          doc.font(font);
+          const isLast = i === parts.length - 1;
+          doc.text(part, {
+            ...options,
+            continued: options.continued || !isLast,
+          });
+        }
+      };
+
       // Helper: Section Header
       const renderSectionHeader = (title: string) => {
         ensureSpace(40);
@@ -68,18 +100,19 @@ export async function generateApplicationPdf(
           .rect(leftMargin, y, contentWidth, 20)
           .fillAndStroke('#f1f5f9', '#cbd5e1');
         doc
-          .font(fontBold)
           .fontSize(10)
-          .fillColor('#0f172a')
-          .text(title, leftMargin + 8, y + 5);
+          .fillColor('#0f172a');
+        doc.text('', leftMargin + 8, y + 5);
+        writeText(title, {}, true);
         doc.y = y + 26;
       };
 
       // Helper: Two-column key-value row
       const renderKeyValue = (key: string, val: string, fullWidth = false) => {
         ensureSpace(18);
-        doc.font(fontBold).fontSize(8.5).fillColor('#475569').text(key + ': ', { continued: true });
-        doc.font(fontRegular).fillColor('#0f172a').text(val || '—');
+        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#475569').text(key + ': ', { continued: true });
+        doc.fillColor('#0f172a');
+        writeText(val || '—', {}, false);
       };
 
       // ─────────────────────────────────────────────────────────────
@@ -185,17 +218,20 @@ export async function generateApplicationPdf(
 
       ensureSpace(40);
       doc.font(fontBold).fontSize(8.5).fillColor('#0f172a').text('Problem Statement (Problem you are solving):');
-      doc.font(fontRegular).fontSize(8).fillColor('#334155').text(data.concept.problemStatement || '—', { align: 'justify' });
+      doc.fontSize(8).fillColor('#334155');
+      writeText(data.concept.problemStatement || '—', { align: 'justify' });
       doc.moveDown(0.4);
 
       ensureSpace(40);
       doc.font(fontBold).fontSize(8.5).fillColor('#0f172a').text('Proposed Solution:');
-      doc.font(fontRegular).fontSize(8).fillColor('#334155').text(data.concept.proposedSolution || '—', { align: 'justify' });
+      doc.fontSize(8).fillColor('#334155');
+      writeText(data.concept.proposedSolution || '—', { align: 'justify' });
       doc.moveDown(0.4);
 
       ensureSpace(40);
       doc.font(fontBold).fontSize(8.5).fillColor('#0f172a').text('Effort and Traction So Far:');
-      doc.font(fontRegular).fontSize(8).fillColor('#334155').text(data.concept.effortAndTraction || '—', { align: 'justify' });
+      doc.fontSize(8).fillColor('#334155');
+      writeText(data.concept.effortAndTraction || '—', { align: 'justify' });
       doc.moveDown(0.4);
 
       if (data.concept.hasReceivedGrantBefore) {
@@ -224,7 +260,8 @@ export async function generateApplicationPdf(
       for (const item of expSections) {
         ensureSpace(32);
         doc.font(fontBold).fontSize(8.5).fillColor('#0f172a').text(item.label + ':');
-        doc.font(fontRegular).fontSize(8).fillColor('#334155').text(item.val || '—', { align: 'justify' });
+        doc.fontSize(8).fillColor('#334155');
+        writeText(item.val || '—', { align: 'justify' });
         doc.moveDown(0.3);
       }
 
@@ -269,7 +306,8 @@ export async function generateApplicationPdf(
           doc.font(fontRegular).fontSize(7.5).fillColor('#1e293b');
           doc.text(String(item.sno), leftMargin + 4, y + 3, { width: 16 });
           doc.text(item.headerName, leftMargin + 22, y + 3, { width: 95, ellipsis: true });
-          doc.text(item.name || '—', leftMargin + 120, y + 3, { width: 140, ellipsis: true });
+          doc.text('', leftMargin + 120, y + 3);
+          writeText(item.name || '—', { width: 140, ellipsis: true });
           doc.text(item.vendor || '—', leftMargin + 265, y + 3, { width: 95, ellipsis: true });
           doc.text(`₹${item.unitCost.toFixed(2)}`, leftMargin + 365, y + 3, { width: 50, align: 'right' });
           doc.text(String(item.qty), leftMargin + 420, y + 3, { width: 25, align: 'center' });
@@ -299,8 +337,10 @@ export async function generateApplicationPdf(
 
       data.budget.items.forEach((item) => {
         ensureSpace(24);
-        doc.font(fontBold).fontSize(8).fillColor('#0f172a').text(`Item #${item.sno}: ${item.name} (${item.headerName} · ₹${item.total.toFixed(2)})`);
-        doc.font(fontRegular).fontSize(7.5).fillColor('#475569').text(item.justification ? `Justification: ${item.justification}` : 'Justification: Standard incubator baseline.', { align: 'justify' });
+        doc.font(fontBold).fontSize(8).fillColor('#0f172a').text(`Item #${item.sno}: ${item.headerName} (₹${item.total.toFixed(2)}) — `, { continued: true });
+        writeText(item.name || '—', {}, true);
+        doc.fontSize(7.5).fillColor('#475569');
+        writeText(item.justification ? `Justification: ${item.justification}` : 'Justification: Standard incubator baseline.', { align: 'justify' });
         doc.moveDown(0.2);
       });
 
@@ -322,9 +362,9 @@ export async function generateApplicationPdf(
 
       data.selfAssessment.milestones.forEach((m, idx) => {
         ensureSpace(14);
-        doc.font(fontRegular).fontSize(8).fillColor('#334155');
+        doc.fontSize(8).fillColor('#334155');
         const badge = m.status === 'COMPLETED' ? '[✓ Done]' : '[○ Pending]';
-        doc.text(`${idx + 1}. ${badge} ${m.name}${m.remarks ? ` — ${m.remarks}` : ''}`);
+        writeText(`${idx + 1}. ${badge} ${m.name}${m.remarks ? ` — ${m.remarks}` : ''}`);
       });
 
       // ─────────────────────────────────────────────────────────────
@@ -336,7 +376,8 @@ export async function generateApplicationPdf(
       ensureSpace(30);
       doc.font(fontBold).fontSize(8.5).fillColor('#0f172a').text('Founding Team Members:');
       const teamNames = data.team.map((t) => t.name).join(', ') || 'Sole Founder';
-      doc.font(fontRegular).fontSize(8).fillColor('#334155').text(teamNames);
+      doc.fontSize(8).fillColor('#334155');
+      writeText(teamNames);
       doc.moveDown(0.3);
 
       doc.font(fontBold).fontSize(8.5).fillColor('#0f172a').text('Uploaded Document Registry (Names & Categories Only):');
@@ -348,9 +389,9 @@ export async function generateApplicationPdf(
       } else {
         data.documents.forEach((d, idx) => {
           ensureSpace(12);
-          doc.font(fontRegular).fontSize(8).fillColor('#334155');
+          doc.fontSize(8).fillColor('#334155');
           const memberSuffix = d.memberLabel ? ` [Member: ${d.memberLabel}]` : '';
-          doc.text(`• ${d.typeName}: "${d.fileName}"${memberSuffix}`);
+          writeText(`• ${d.typeName}: "${d.fileName}"${memberSuffix}`);
         });
       }
 
@@ -369,7 +410,8 @@ export async function generateApplicationPdf(
 
       if (data.declaration) {
         doc.font(fontBold).fontSize(8.5).fillColor('#15803d');
-        doc.text(`✓ Electronically Signed by: ${data.declaration.declaredByName}`);
+        doc.text('✓ Electronically Signed by: ', { continued: true });
+        writeText(data.declaration.declaredByName, {}, true);
         doc.font(fontRegular).fontSize(8).fillColor('#475569');
         doc.text(`Signature Timestamp: ${data.declaration.declaredAtIST}`);
       } else {
